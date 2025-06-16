@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  tts-service:
+    # 使用当前目录下的 Dockerfile 来构建镜像
+    build: .
+    # 给容器起一个好记的名字
+    container_name: local-tts-service
+    # 端口映射：
+    # 将主机（您自己的电脑）的端口映射到容器内部的端口。
+    # 主机端口由 .env 文件中的 TTS_PORT 变量定义，如果未定义，则默认为 5000。
+    # 容器端口应与 config.json 中定义的端口一致。
+    ports:
+      - "${TTS_PORT:-5050}:5000"
+    # 数据卷映射：
+    # 这是实现动态配置的关键！它将您本地的 config.json 文件直接链接到容器内部。
+    # 这样，您通过 WebUI 保存的配置会直接修改本地文件，并立即在容器中生效。
+    volumes:
+      - ./config.json:/app/config.json
+    # 重启策略：
+    # 除非手动停止，否则容器在退出时会自动重启，保证服务高可用。
+    restart: unless-stopped
