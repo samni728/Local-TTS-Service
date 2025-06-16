@@ -13,5 +13,5 @@ __pycache__/
 .vscode/
 *.swp
 .DS_Store
-# Config file (optional, if you don't want to commit default config)
-# config.json 
+#Config file (optional, if you don't want to commit default config)
+config.json 

@@ -3,8 +3,7 @@
 
 一个基于 Microsoft Edge TTS 引擎的本地语音合成服务。它提供了一个简洁的 Web 界面和一套兼容 OpenAI TTS API 格式的接口，允许您轻松地将高质量的文本转语音功能集成到任何应用中。
 
-![项目截图](https://www.example.com/screenshot.png)  
-*（提示：您可以将项目运行后的界面截图，上传到图床或 GitHub issue 中，然后替换这里的链接。）*
+![项目截图](https://private-user-images.githubusercontent.com/68144774/455600738-2ca617f8-1431-45f8-aa57-ffa57b01dabf.jpg?jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3NTAwODgyNjEsIm5iZiI6MTc1MDA4Nzk2MSwicGF0aCI6Ii82ODE0NDc3NC80NTU2MDA3MzgtMmNhNjE3ZjgtMTQzMS00NWY4LWFhNTctZmZhNTdiMDFkYWJmLmpwZz9YLUFtei1BbGdvcml0aG09QVdTNC1ITUFDLVNIQTI1NiZYLUFtei1DcmVkZW50aWFsPUFLSUFWQ09EWUxTQTUzUFFLNFpBJTJGMjAyNTA2MTYlMkZ1cy1lYXN0LTElMkZzMyUyRmF3czRfcmVxdWVzdCZYLUFtei1EYXRlPTIwMjUwNjE2VDE1MzI0MVomWC1BbXotRXhwaXJlcz0zMDAmWC1BbXotU2lnbmF0dXJlPWJkODRjYWE5ZTMzMzkzYjY0M2UxYjhiMWI5OGJjNWVhMDdhOTUyZjhlZmE5ZWM3YjdjYWE0OTNkNGY4NjMzOGQmWC1BbXotU2lnbmVkSGVhZGVycz1ob3N0In0.yrwMZi6u68_96DVinOEczeIXyYL286qERhq2n-bYMR0)  
 
 ---
 
@@ -54,7 +53,7 @@
     服务启动时，会自动在项目根目录创建一个 `config.json` 文件。
 
 5.  **访问 WebUI**
-    打开浏览器，访问 `http://localhost:5000` (或您在 `config.json` 或 WebUI 中配置的其他端口)。
+    打开浏览器，访问 `http://localhost:5050` (或您在 `config.json` 或 WebUI 中配置的其他端口)。
 
 ## ⚙️ WebUI 配置
 
