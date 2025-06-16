@@ -1,0 +1,11 @@
+{
+    "port": 5050,
+    "openai_voice_map": {
+        "shimmer": "zh-CN-XiaoxiaoNeural",
+        "alloy": "en-US-AriaNeural",
+        "fable": "zh-CN-shaanxi-XiaoniNeural",
+        "onyx": "en-US-ChristopherNeural",
+        "nova": "en-US-AvaNeural",
+        "echo": "zh-CN-YunyangNeural"
+    }
+}

@@ -14,4 +14,4 @@ __pycache__/
 *.swp
 .DS_Store
 #Config file (optional, if you don't want to commit default config)
-config.json 
+#config.json 
