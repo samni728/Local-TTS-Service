@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>可配置的本地 TTS 服务</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- 主要功能区 -->
+        <h1>本地多语言 TTS 服务</h1>
+        <p>基于 Microsoft Edge TTS 引擎，支持多种语言和音色。</p>
+
+        <div class="form-group">
+            <label for="text-input">输入文本:</label>
+            <textarea id="text-input" rows="5" placeholder="在这里输入要转换为语音的文本..."></textarea>
+        </div>
+
+        <div class="form-group-inline">
+            <div class="form-group">
+                <label for="language-select">选择语言:</label>
+                <select id="language-select">
+                    <option value="">-- 选择语言 --</option>
+                    {% for code, name in locales.items() %}
+                    <option value="{{ code }}">{{ name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="voice-select">选择声音:</label>
+                <select id="voice-select" disabled><option>请先选择语言</option></select>
+            </div>
+        </div>
+
+        <button id="speak-button">
+            <span class="button-text">播放语音</span>
+            <div class="spinner" style="display: none;"></div>
+        </button>
+        
+        <audio id="audio-player" controls style="display: none;"></audio>
+        <div id="error-message" class="error" style="display: none;"></div>
+
+        <!-- 可折叠的设置区域 -->
+        <details class="collapsible-section">
+            <summary>服务设置</summary>
+            <div class="details-content">
+                <div class="form-group">
+                    <label for="port-input">服务端口 (修改后需重启服务):</label>
+                    <input type="number" id="port-input" class="settings-input">
+                </div>
+                <h3>OpenAI 音色映射</h3>
+                <div id="openai-mappings-container">
+                    <div class="spinner-wrapper"><div class="spinner"></div></div>
+                </div>
+                <button id="save-settings-button">保存设置</button>
+                <div id="settings-feedback" class="feedback" style="display: none;"></div>
+            </div>
+        </details>
+
+        <!-- 可折叠的 API 指引区域 -->
+        <details class="collapsible-section">
+            <summary>API 配置指引</summary>
+            <div class="details-content">
+                <h3>API 端点</h3>
+                <p>所有请求都使用 POST 方法发送到以下地址:</p>
+                <pre><code>http://Your_IP:PORT/v1/audio/speech</code></pre>
+
+                <h3>1. OpenAI 兼容格式 (推荐)</h3>
+                <p>使用 OpenAI 的标准音色名 (`shimmer`, `alloy` 等) 调用，服务会自动映射到您在上面设置中选择的音色。</p>
+                <pre><code>curl -X POST http://localhost:5000/v1/audio/speech \
+-H "Content-Type: application/json" \
+-d '{
+  "model": "tts-1",
+  "input": "你好，这是一个兼容 OpenAI 的测试。",
+  "voice": "shimmer"
+}' --output openai_test.mp3</code></pre>
+
+                <h3>2. EdgeTTS 直接格式</h3>
+                <p>直接使用 EdgeTTS 的完整音色名称进行调用。这种方式会绕过您的 OpenAI 音色映射设置。</p>
+                <pre><code>curl -X POST http://localhost:5000/v1/audio/speech \
+-H "Content-Type: application/json" \
+-d '{
+  "model": "tts-1",
+  "input": "Hello, this is a direct voice test.",
+  "voice": "en-US-AriaNeural"
+}' --output direct_test.mp3</code></pre>
+            </div>
+        </details>
+        
+    </div>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
