@@ -4,7 +4,6 @@ flask>=2.3.0
 flask-cors>=4.0.0
 python-dotenv>=1.0.0
 asgiref>=3.7.2
-pydub>=0.25.1
 
 # 'requests' 是 edge-tts 的子依赖，但保留它也无害。
 requests>=2.31.0

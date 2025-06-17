@@ -1,17 +1,16 @@
-version: '3.8'
+version: "3.8"
 
 services:
   tts-service:
     build:
       context: .
-      # --- 优化核心：将宿主机的环境变量传递给 Docker 构建过程 ---
       args:
-        # Dockerfile 中的构建参数 PIP_INDEX_URL 将会使用
-        # 宿主机上名为 PIP_INDEX_URL 的环境变量的值。
+        # 将宿主机的环境变量传递给 Docker 构建过程
         - PIP_INDEX_URL
     container_name: local-tts-service
     ports:
       - "${TTS_PORT:-5050}:5050"
     volumes:
       - ./config.json:/app/config.json
+      - ./tts_data:/app/tts_data
     restart: unless-stopped

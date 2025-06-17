@@ -54,7 +54,8 @@ label {
 }
 textarea,
 select,
-input[type="number"] {
+input[type="number"],
+input[type="text"] {
   width: 100%;
   padding: 12px;
   border: 1px solid #ced4da;
@@ -66,7 +67,8 @@ input[type="number"] {
 }
 textarea:focus,
 select:focus,
-input[type="number"]:focus {
+input[type="number"]:focus,
+input[type="text"]:focus {
   outline: none;
   border-color: #80bdff;
   box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
@@ -80,8 +82,7 @@ textarea {
 }
 
 /* Buttons, Spinners, and Checkbox */
-button,
-.secondary-button {
+button {
   width: 100%;
   padding: 15px;
   border: none;
@@ -155,21 +156,12 @@ button:disabled {
 .audio-container {
   display: flex;
   align-items: center;
-  gap: 15px;
+  gap: 10px;
   margin-top: 20px;
 }
 #audio-player {
   flex-grow: 1;
-}
-.secondary-button {
-  background-color: #6c757d;
-  padding: 10px 15px;
-  font-size: 16px;
-  white-space: nowrap;
-  width: auto;
-}
-.secondary-button:hover {
-  background-color: #5a6268;
+  margin-top: 0;
 }
 .error {
   color: #721c24;
@@ -277,6 +269,41 @@ button:disabled {
   color: #6c757d;
   margin-top: 5px;
   padding-right: 5px;
+}
+
+/* Specific new styles */
+.input-with-button {
+  display: flex;
+  gap: 10px;
+}
+.input-with-button .settings-input {
+  flex-grow: 1;
+}
+.icon-button {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 48px;
+  height: 48px;
+  background-color: #6c757d;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  flex-shrink: 0;
+}
+.icon-button:hover {
+  background-color: #5a6268;
+}
+.icon-button svg {
+  width: 22px;
+  height: 22px;
+}
+#download-link.icon-button {
+  height: auto;
+  align-self: stretch;
+  padding: 0 12px;
 }
 
 /* Footer */

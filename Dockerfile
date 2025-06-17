@@ -2,11 +2,11 @@
 FROM python:3.10-slim
 
 # --- 优化核心：允许在构建时动态指定 PyPI 镜像 ---
-# 1. 定义一个构建时参数 PIP_INDEX_URL，并设置一个默认值（官方源）
 ARG PIP_INDEX_URL=https://pypi.org/simple
-
-# 2. 将这个参数的值设置成一个环境变量，以便后续命令可以使用
 ENV PIP_INDEX_URL=${PIP_INDEX_URL}
+
+# --- 安装核心系统依赖：ffmpeg ---
+RUN apt-get update && apt-get install -y ffmpeg --no-install-recommends && rm -rf /var/lib/apt/lists/*
 
 # 设置容器内的工作目录
 WORKDIR /app
@@ -14,9 +14,7 @@ WORKDIR /app
 # 将 requirements.txt 复制到工作目录
 COPY requirements.txt .
 
-# 3. 在 pip install 命令中使用这个环境变量
-#    如果构建时没有提供 PIP_INDEX_URL，它会使用默认的官方源
-#    如果提供了，它会使用指定的镜像源
+# 使用环境变量安装 Python 依赖
 RUN pip install --no-cache-dir -r requirements.txt -i ${PIP_INDEX_URL}
 
 # 将项目的所有文件复制到工作目录

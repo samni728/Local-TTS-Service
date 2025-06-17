@@ -1,11 +1,12 @@
 {
     "port": 5050,
+    "api_token": "f99e5e92eea805f68cc00002ff53c724",
     "openai_voice_map": {
-        "shimmer": "zh-CN-liaoning-XiaobeiNeural",
-        "alloy": "zh-HK-HiuGaaiNeural",
-        "fable": "zh-HK-WanLungNeural",
-        "onyx": "zh-CN-YunxiaNeural",
-        "nova": "zh-CN-liaoning-XiaobeiNeural",
+        "shimmer": "zh-CN-XiaoxiaoNeural",
+        "alloy": "en-US-AriaNeural",
+        "fable": "zh-CN-shaanxi-XiaoniNeural",
+        "onyx": "en-US-ChristopherNeural",
+        "nova": "en-US-AvaNeural",
         "echo": "zh-CN-YunyangNeural"
     }
 }

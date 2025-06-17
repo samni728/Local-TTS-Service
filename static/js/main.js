@@ -22,6 +22,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const downloadLink = document.getElementById("download-link");
   const errorMessage = document.getElementById("error-message");
   const portInput = document.getElementById("port-input");
+  const apiTokenInput = document.getElementById("api-token-input");
+  const generateTokenButton = document.getElementById("generate-token-button");
   const mappingsContainer = document.getElementById(
     "openai-mappings-container"
   );
@@ -56,11 +58,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const curlExampleOpenAI = document.getElementById("curl-example-openai");
     const curlExampleDirect = document.getElementById("curl-example-direct");
 
+    const token = apiTokenInput.value.trim();
+    const authHeader = token ? ` \\\n-H "Authorization: Bearer ${token}"` : "";
+
     if (apiEndpointDisplay) apiEndpointDisplay.textContent = apiUrl;
     if (curlExampleOpenAI)
-      curlExampleOpenAI.textContent = `curl -X POST ${apiUrl} \\\n-H "Content-Type: application/json" \\\n-d '{\n  "model": "tts-1",\n  "input": "你好，这是一个兼容 OpenAI 的测试。",\n  "voice": "shimmer"\n}' --output openai_test.mp3`;
+      curlExampleOpenAI.textContent = `curl -X POST ${apiUrl}${authHeader} \\\n-H "Content-Type: application/json" \\\n-d '{\n  "model": "tts-1",\n  "input": "你好，这是一个兼容 OpenAI 的测试。",\n  "voice": "shimmer"\n}' --output openai_test.mp3`;
     if (curlExampleDirect)
-      curlExampleDirect.textContent = `curl -X POST ${apiUrl} \\\n-H "Content-Type: application/json" \\\n-d '{\n  "model": "tts-1",\n  "input": "Hello, this is a direct voice test.",\n  "voice": "en-US-AriaNeural"\n}' --output direct_test.mp3`;
+      curlExampleDirect.textContent = `curl -X POST ${apiUrl}${authHeader} \\\n-H "Content-Type: application/json" \\\n-d '{\n  "model": "tts-1",\n  "input": "Hello, this is a direct voice test.",\n  "voice": "en-US-AriaNeural"\n}' --output direct_test.mp3`;
   };
 
   const updateVoiceList = (selectedLocale) => {
@@ -82,6 +87,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const populateSettingsForm = () => {
     portInput.value = currentConfig.port;
+    apiTokenInput.value = currentConfig.api_token || "";
     mappingsContainer.innerHTML = "";
     OPENAI_VOICE_ALIASES.forEach((alias) => {
       const currentMapping = currentConfig.openai_voice_map[alias];
@@ -98,11 +104,13 @@ document.addEventListener("DOMContentLoaded", () => {
       });
       mappingsContainer.appendChild(wrapper);
     });
+    updateApiExamples();
   };
 
   const handleSaveSettings = async () => {
     const newConfig = {
       port: parseInt(portInput.value, 10),
+      api_token: apiTokenInput.value.trim(),
       openai_voice_map: {},
     };
     OPENAI_VOICE_ALIASES.forEach(
@@ -123,8 +131,7 @@ document.addEventListener("DOMContentLoaded", () => {
         result.message || result.error,
         !response.ok
       );
-      if (response.ok)
-        currentConfig.openai_voice_map = newConfig.openai_voice_map;
+      if (response.ok) currentConfig = newConfig;
     } catch (error) {
       showMessage(settingsFeedback, "保存失败: 无法连接到服务器。", true);
     }
@@ -147,18 +154,31 @@ document.addEventListener("DOMContentLoaded", () => {
     audioContainer.style.display = "none";
 
     try {
+      const headers = { "Content-Type": "application/json" };
+      if (currentConfig.api_token) {
+        headers["Authorization"] = `Bearer ${currentConfig.api_token}`;
+      }
+
       const response = await fetch("/v1/audio/speech", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: headers,
         body: JSON.stringify({ model: "tts-1", input: text, voice: voice }),
       });
+
+      if (response.status === 401 || response.status === 403) {
+        const errorData = await response.json();
+        throw new Error(errorData.error?.message || "API Token 验证失败。");
+      }
+
       if (response.ok) {
         const blob = await response.blob();
         if (blob.size === 0) throw new Error("服务器返回了空的音频文件。");
         if (lastGeneratedBlobUrl) URL.revokeObjectURL(lastGeneratedBlobUrl);
+
         lastGeneratedBlobUrl = URL.createObjectURL(blob);
         audioPlayer.src = lastGeneratedBlobUrl;
         downloadLink.href = lastGeneratedBlobUrl;
+
         audioContainer.style.display = "flex";
         if (autoPlayCheckbox.checked) audioPlayer.play();
       } else {
@@ -174,6 +194,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const updateCharCount = () =>
     (charCounter.textContent = `字数: ${textInput.value.length}`);
+
+  const generateRandomToken = () => {
+    const array = new Uint8Array(16);
+    window.crypto.getRandomValues(array);
+    return Array.from(array, (byte) => byte.toString(16).padStart(2, "0")).join(
+      ""
+    );
+  };
 
   const initialize = async () => {
     try {
@@ -193,12 +221,16 @@ document.addEventListener("DOMContentLoaded", () => {
       );
       speakButton.addEventListener("click", handleSpeakClick);
       saveSettingsButton.addEventListener("click", handleSaveSettings);
+      generateTokenButton.addEventListener("click", () => {
+        apiTokenInput.value = generateRandomToken();
+        updateApiExamples();
+      });
+      apiTokenInput.addEventListener("input", updateApiExamples);
 
       const defaultLang = "zh-CN";
       languageSelect.value = defaultLang;
       updateVoiceList(defaultLang);
       populateSettingsForm();
-      updateApiExamples();
     } catch (error) {
       showMessage(errorMessage, error.message, true);
     }
