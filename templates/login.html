@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>登录 - 本地 TTS 服务</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/style.css') }}"
+    />
+    <style>
+      body {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+        height: 100vh;
+      }
+      .login-container {
+        width: 100%;
+        max-width: 420px;
+        text-align: center;
+        padding: 40px;
+        margin: 0;
+      }
+      .login-container h1 {
+        font-size: 2rem;
+        margin-bottom: 10px;
+      }
+      .login-container p {
+        text-align: center;
+        color: #6c757d;
+        margin-bottom: 30px;
+      }
+      .login-container .form-group {
+        text-align: left;
+      }
+      .login-container button {
+        margin-top: 10px;
+      }
+      .site-footer {
+        max-width: 420px;
+        padding: 0;
+        border-top: none;
+        position: absolute;
+        bottom: 30px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container login-container">
+      <h1>登录到 TTS 服务</h1>
+      <p>此服务已启用密码保护。</p>
+      <form method="post" id="login-form">
+        <input type="hidden" name="next" id="next-url" />
+        <div class="form-group">
+          <label for="password">密码:</label>
+          <input
+            type="password"
+            id="password"
+            name="password"
+            class="settings-input"
+            required
+            autofocus
+          />
+        </div>
+        {% if error %}
+        <div class="error" style="display: block">{{ error }}</div>
+        {% endif %}
+        <button type="submit">登 录</button>
+      </form>
+    </div>
+
+    <footer class="site-footer">
+      <p style="text-align: center; font-size: 13px">
+        <a href="https://github.com/samni728/Local-TTS-Service" target="_blank">
+          Local-TTS-Service on GitHub
+        </a>
+      </p>
+    </footer>
+
+    <script>
+      // 这段脚本会在页面加载时，智能地设置重定向 URL
+      document.addEventListener("DOMContentLoaded", function () {
+        const nextUrlInput = document.getElementById("next-url");
+        // 使用 URLSearchParams 来获取从上一个页面传来的 'next' 参数
+        const params = new URLSearchParams(window.location.search);
+        const nextFromUrl = params.get("next");
+
+        // 优先使用 URL 中的 next 参数，如果不存在，则使用 document.referrer
+        // document.referrer 是指引用户来到当前页面的上一个页面的地址
+        // 如果用户是直接打开登录页，则 referrer 为空，我们默认跳转到主页 '/'
+        let redirectTo = nextFromUrl || document.referrer || "/";
+
+        // 防止重定向到登录页本身，造成死循环
+        if (redirectTo.includes("/login")) {
+          redirectTo = "/";
+        }
+
+        nextUrlInput.value = redirectTo;
+      });
+    </script>
+  </body>
+</html>

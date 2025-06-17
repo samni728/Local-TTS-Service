@@ -1,6 +1,6 @@
 {
     "port": 5050,
-    "api_token": "f99e5e92eea805f68cc00002ff53c724",
+    "api_token": "0f16a0a8e7d29e9895b5ae87844df1a6",
     "openai_voice_map": {
         "shimmer": "zh-CN-XiaoxiaoNeural",
         "alloy": "en-US-AriaNeural",
