@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>可配置的本地 TTS 服务</title>
+    <title>本地多语言 TTS 服务</title>
     <link
       rel="stylesheet"
       href="{{ url_for('static', filename='css/style.css') }}"
@@ -11,7 +11,6 @@
   </head>
   <body>
     <div class="container">
-      <!-- 主要功能区 -->
       <h1>本地多语言 TTS 服务</h1>
       <p>基于 Microsoft Edge TTS 引擎，支持多种语言和音色。</p>
 
@@ -22,6 +21,7 @@
           rows="5"
           placeholder="在这里输入要转换为语音的文本..."
         ></textarea>
+        <div id="char-counter" class="char-counter">字数: 0</div>
       </div>
 
       <div class="form-group-inline">
@@ -42,15 +42,27 @@
         </div>
       </div>
 
+      <div class="form-group">
+        <label class="checkbox-label">
+          <input type="checkbox" id="auto-play" checked />
+          生成后自动播放
+        </label>
+      </div>
+
       <button id="speak-button">
-        <span class="button-text">播放语音</span>
+        <span class="button-text">🎵 生成语音</span>
         <div class="spinner" style="display: none"></div>
       </button>
 
-      <audio id="audio-player" controls style="display: none"></audio>
+      <div id="audio-container" class="audio-container" style="display: none">
+        <audio id="audio-player" controls></audio>
+        <a id="download-link" class="secondary-button" download="tts_output.mp3"
+          >⬇️ 下载音频</a
+        >
+      </div>
+
       <div id="error-message" class="error" style="display: none"></div>
 
-      <!-- 可折叠的设置区域 -->
       <details class="collapsible-section">
         <summary>服务设置</summary>
         <div class="details-content">
@@ -71,13 +83,11 @@
         </div>
       </details>
 
-      <!-- 可折叠的 API 指引区域 -->
-      <details class="collapsible-section" open>
+      <details class="collapsible-section">
         <summary>API 配置指引</summary>
         <div class="details-content">
           <h3>API 端点</h3>
           <p>所有请求都使用 POST 方法发送到以下地址:</p>
-          <!-- KEY CHANGE: Added id="api-endpoint-display" -->
           <pre><code id="api-endpoint-display">正在获取地址...</code></pre>
 
           <h3>1. OpenAI 兼容格式 (推荐)</h3>
@@ -85,7 +95,6 @@
             使用 OpenAI 的标准音色名 (`shimmer`, `alloy` 等)
             调用，服务会自动映射到您在上面设置中选择的音色。
           </p>
-          <!-- KEY CHANGE: Added id="curl-example-openai" -->
           <pre><code id="curl-example-openai">正在生成示例...</code></pre>
 
           <h3>2. EdgeTTS 直接格式</h3>
@@ -93,10 +102,22 @@
             直接使用 EdgeTTS 的完整音色名称进行调用。这种方式会绕过您的 OpenAI
             音色映射设置。
           </p>
-          <!-- KEY CHANGE: Added id="curl-example-direct" -->
           <pre><code id="curl-example-direct">正在生成示例...</code></pre>
         </div>
       </details>
+
+      <footer class="site-footer">
+        © 2025
+        <a href="https://github.com/samni728" target="_blank">samni728</a>
+         · 
+        <a
+          href="https://github.com/samni728/Local-TTS-Service"
+          target="_blank"
+          class="github-link"
+        >
+          ⭐ Star on GitHub
+        </a>
+      </footer>
     </div>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
   </body>
