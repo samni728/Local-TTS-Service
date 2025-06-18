@@ -1,13 +1,21 @@
 {
     "port": 5050,
-    "api_token": "0f16a0a8e7d29e9895b5ae87844df1a6",
+    "api_token": "4d1f66c65415519b87d2905060512191",
     "openai_voice_map": {
         "shimmer": "zh-CN-XiaoxiaoNeural",
-        "alloy": "en-US-AriaNeural",
-        "fable": "zh-CN-shaanxi-XiaoniNeural",
-        "onyx": "en-US-ChristopherNeural",
-        "nova": "en-US-AvaNeural",
-        "echo": "zh-CN-YunyangNeural"
+        "alloy": "zh-CN-shaanxi-XiaoniNeural",
+        "fable": "zh-CN-YunxiNeural",
+        "onyx": "zh-HK-HiuMaanNeural",
+        "nova": "zh-TW-HsiaoChenNeural",
+        "echo": "zh-HK-HiuGaaiNeural"
     },
-    "max_concurrent_requests": 10
+    "max_concurrent_requests": 10,
+    "sync_api_filtering": true,
+    "default_cleaning_options": {
+        "remove_markdown": true,
+        "remove_emoji": true,
+        "no_urls": true,
+        "no_line_breaks": false,
+        "custom_keywords": ""
+    }
 }

@@ -3,7 +3,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let allVoices = [];
   let currentConfig = {};
   let lastGeneratedBlobUrl = null;
-  let progressInterval = null; // 用于存储进度条的 interval ID
+  let progressInterval = null;
   const OPENAI_VOICE_ALIASES = [
     "shimmer",
     "alloy",
@@ -28,7 +28,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const mappingsContainer = document.getElementById(
     "openai-mappings-container"
   );
-  const saveSettingsButton = document.getElementById("save-settings-button");
   const settingsFeedback = document.getElementById("settings-feedback");
   const charCounter = document.getElementById("char-counter");
   const autoPlayCheckbox = document.getElementById("auto-play");
@@ -36,6 +35,11 @@ document.addEventListener("DOMContentLoaded", () => {
   const progressContainer = document.getElementById("progress-container");
   const progressBar = document.getElementById("progress-bar");
   const progressText = document.getElementById("progress-text");
+  const cleaningOptionsPanel = document.getElementById(
+    "cleaning-options-panel"
+  );
+  const syncApiFilteringCheckbox =
+    document.getElementById("sync-api-filtering");
 
   // 3. 功能函数
   const showMessage = (element, message, isError = false) => {
@@ -44,27 +48,22 @@ document.addEventListener("DOMContentLoaded", () => {
     element.style.display = "block";
     setTimeout(() => {
       element.style.display = "none";
-    }, 5000);
+    }, 3000);
   };
 
   const setLoading = (isLoading) => {
     speakButton.disabled = isLoading;
-    // 在加载时，我们不再显示按钮内的 spinner，而是显示外部的进度条
     const buttonText = speakButton.querySelector(".button-text");
-    if (buttonText) buttonText.style.display = "inline-flex";
-
     if (isLoading) {
       progressContainer.style.display = "flex";
       let progress = 0;
       progressBar.style.width = "0%";
       progressText.textContent = "0%";
-
-      // 启动智能心跳进度条
       if (progressInterval) clearInterval(progressInterval);
       progressInterval = setInterval(() => {
         if (progress < 95) {
           const increment = progress < 50 ? 1 : progress < 80 ? 0.5 : 0.2;
-          progress = Math.min(progress + increment, 95); // 确保不超过95%
+          progress = Math.min(progress + increment, 95);
           progressBar.style.width = `${progress}%`;
           progressText.textContent = `${Math.floor(progress)}%`;
         }
@@ -115,6 +114,17 @@ document.addEventListener("DOMContentLoaded", () => {
     portInput.value = currentConfig.port;
     apiTokenInput.value = currentConfig.api_token || "";
     concurrencyInput.value = currentConfig.max_concurrent_requests;
+    syncApiFilteringCheckbox.checked = currentConfig.sync_api_filtering;
+
+    const opts = currentConfig.default_cleaning_options || {};
+    document
+      .querySelectorAll('#cleaning-options input[type="checkbox"]')
+      .forEach((checkbox) => {
+        checkbox.checked = opts[checkbox.name] || false;
+      });
+    document.getElementById("custom-keywords").value =
+      opts.custom_keywords || "";
+
     mappingsContainer.innerHTML = "";
     OPENAI_VOICE_ALIASES.forEach((alias) => {
       const currentMapping = currentConfig.openai_voice_map[alias];
@@ -134,35 +144,43 @@ document.addEventListener("DOMContentLoaded", () => {
     updateApiExamples();
   };
 
-  const handleSaveSettings = async () => {
+  const autoSaveConfig = () => {
     const newConfig = {
       port: parseInt(portInput.value, 10),
       api_token: apiTokenInput.value.trim(),
       max_concurrent_requests: parseInt(concurrencyInput.value, 10),
+      sync_api_filtering: syncApiFilteringCheckbox.checked,
+      default_cleaning_options: {},
       openai_voice_map: {},
     };
-    OPENAI_VOICE_ALIASES.forEach(
-      (alias) =>
-        (newConfig.openai_voice_map[alias] = document.getElementById(
-          `mapping-${alias}`
-        ).value)
-    );
-    try {
-      const response = await fetch("/v1/config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newConfig),
+    document
+      .querySelectorAll('#cleaning-options input[type="checkbox"]')
+      .forEach((checkbox) => {
+        newConfig.default_cleaning_options[checkbox.name] = checkbox.checked;
       });
-      const result = await response.json();
-      showMessage(
-        settingsFeedback,
-        result.message || result.error,
-        !response.ok
+    newConfig.default_cleaning_options["custom_keywords"] =
+      document.getElementById("custom-keywords").value;
+    OPENAI_VOICE_ALIASES.forEach((alias) => {
+      const select = document.getElementById(`mapping-${alias}`);
+      if (select) newConfig.openai_voice_map[alias] = select.value;
+    });
+
+    fetch("/v1/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(newConfig),
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error("Failed to save config");
+        return response.json();
+      })
+      .then((result) => {
+        console.log("Config auto-saved:", result.message);
+        currentConfig = newConfig;
+      })
+      .catch((error) =>
+        showMessage(settingsFeedback, "自动保存设置失败!", true)
       );
-      if (response.ok) currentConfig = newConfig;
-    } catch (error) {
-      showMessage(settingsFeedback, "保存失败: 无法连接到服务器。", true);
-    }
   };
 
   const handleSpeakClick = async () => {
@@ -207,7 +225,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }),
       });
 
-      setLoading(false); // 无论成功失败，都停止进度条
+      setLoading(false);
 
       if (response.status >= 400) {
         const errorData = await response.json();
@@ -216,23 +234,20 @@ document.addEventListener("DOMContentLoaded", () => {
             `服务器返回错误 (状态码: ${response.status})`
         );
       }
-
       if (response.ok) {
         const blob = await response.blob();
         if (blob.size === 0) throw new Error("服务器返回了空的音频文件。");
         if (lastGeneratedBlobUrl) URL.revokeObjectURL(lastGeneratedBlobUrl);
-
         lastGeneratedBlobUrl = URL.createObjectURL(blob);
         audioPlayer.src = lastGeneratedBlobUrl;
         downloadLink.href = lastGeneratedBlobUrl;
-
         audioContainer.style.display = "flex";
         if (autoPlayCheckbox.checked) audioPlayer.play();
       } else {
         throw new Error("发生未知网络错误。");
       }
     } catch (error) {
-      setLoading(false); // 确保在捕获到异常时也停止进度条
+      setLoading(false);
       showMessage(errorMessage, `语音生成失败: ${error.message}`, true);
     }
   };
@@ -265,12 +280,25 @@ document.addEventListener("DOMContentLoaded", () => {
         updateVoiceList(languageSelect.value)
       );
       speakButton.addEventListener("click", handleSpeakClick);
-      saveSettingsButton.addEventListener("click", handleSaveSettings);
       generateTokenButton.addEventListener("click", () => {
         apiTokenInput.value = generateRandomToken();
+        autoSaveConfig();
         updateApiExamples();
       });
       apiTokenInput.addEventListener("input", updateApiExamples);
+
+      // 为所有配置项绑定自动保存事件
+      document
+        .querySelector(".details-content")
+        .addEventListener("change", (event) => {
+          if (
+            event.target.matches(
+              ".settings-input, #cleaning-options-panel input"
+            )
+          ) {
+            autoSaveConfig();
+          }
+        });
 
       const defaultLang = "zh-CN";
       languageSelect.value = defaultLang;

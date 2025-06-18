@@ -15,7 +15,7 @@ import edge_tts
 from flask import Flask, request, jsonify, render_template, send_file, session, redirect, url_for
 from flask_cors import CORS
 from dotenv import load_dotenv
-import emoji # <--- 新增 emoji 库
+import emoji
 
 # --- 配置和初始化 ---
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] [%(levelname)s] - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
@@ -47,6 +47,11 @@ def initialize_config():
     global config, MAX_CONCURRENT_REQUESTS
     default_config = {
         "port": 5050, "api_token": "", "max_concurrent_requests": 20,
+        "sync_api_filtering": True,
+        "default_cleaning_options": {
+            "remove_markdown": True, "remove_emoji": True,
+            "no_urls": True, "no_line_breaks": False, "custom_keywords": ""
+        },
         "openai_voice_map": { "shimmer": "zh-CN-XiaoxiaoNeural", "alloy": "en-US-AriaNeural", "fable": "zh-CN-shaanxi-XiaoniNeural", "onyx": "en-US-ChristopherNeural", "nova": "en-US-AvaNeural", "echo": "zh-CN-YunyangNeural" }
     }
     loaded_config = load_config_from_file()
@@ -115,49 +120,32 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-# --- 核心业务逻辑 (V20: 采纳您的正确逻辑进行最终修复) ---
+# --- 核心业务逻辑 ---
 def pre_process_text(text, options):
     logger.info(f"Applying text cleaning with options: {options}")
-    
     processed_text = text
-
-    # 移除 URL
-    if options.get('no_urls'):
-        processed_text = re.sub(r'http\S+|www\S+|https\S+', '', processed_text, flags=re.MULTILINE)
-
-    # 使用 emoji 库移除表情符号
-    if options.get('remove_emoji'):
-        processed_text = emoji.replace_emoji(processed_text, replace='')
-
-    # 移除 Markdown 语法 (采纳您的正确方案)
     if options.get('remove_markdown'):
-        # 替换链接和图片为纯文本
-        processed_text = re.sub(r'\[!\[([^\]]*)\]\([^\)]+\)\]\([^\)]+\)', r'\1', processed_text) # 链接中的图片
-        processed_text = re.sub(r'!\[([^\]]*)\]\([^\)]+\)', r'\1', processed_text) # 图片，保留 alt 文本
-        processed_text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', processed_text) # 链接，保留链接文本
-
-        # 移除代码块
+        processed_text = re.sub(r'\[!\[([^\]]*)\]\([^\)]+\)\]\([^\)]+\)', r'\1', processed_text)
+        processed_text = re.sub(r'!\[([^\]]*)\]\([^\)]+\)', r'\1', processed_text)
+        processed_text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', processed_text)
         processed_text = re.sub(r'```[\s\S]*?```', '', processed_text)
         processed_text = re.sub(r'`([^`]+)`', r'\1', processed_text)
-        
-        # 移除粗体、斜体
         processed_text = re.sub(r'(\*\*|__)(.*?)\1', r'\2', processed_text)
         processed_text = re.sub(r'(\*|_)(.*?)\1', r'\2', processed_text)
-        
-        # 移除标题、列表、引用、分隔线等格式符号
         processed_text = re.sub(r'^\s*#+\s*', '', processed_text, flags=re.MULTILINE)
         processed_text = re.sub(r'^\s*[\*\-]\s*|\s*\d+\.\s*', '', processed_text, flags=re.MULTILINE)
         processed_text = re.sub(r'^\s*>\s?', '', processed_text, flags=re.MULTILINE)
         processed_text = re.sub(r'^\s*[-*_]{3,}\s*$', '', processed_text, flags=re.MULTILINE)
-    
+    if options.get('remove_emoji'):
+        processed_text = emoji.replace_emoji(processed_text, replace='')
+    if options.get('no_urls'):
+        processed_text = re.sub(r'http\S+|www\S+|https\S+', '', processed_text, flags=re.MULTILINE)
     custom_keywords_str = options.get('custom_keywords', '')
     if custom_keywords_str:
         keywords = [re.escape(k.strip()) for k in custom_keywords_str.split(',') if k.strip()]
         if keywords:
             regex_pattern = '|'.join(keywords)
             processed_text = re.sub(regex_pattern, '', processed_text)
-
-    # 智能重组断裂行
     if not options.get('no_line_breaks'):
         lines = processed_text.split('\n')
         reunited_lines = []
@@ -171,14 +159,11 @@ def pre_process_text(text, options):
         processed_text = '\n'.join(reunited_lines)
     else:
         processed_text = processed_text.replace('\n', ' ')
-
-    # 最后，清理所有多余的空格和制表符
     return re.sub(r' +', ' ', processed_text.replace('\t', ' ')).strip()
 
 def split_text_intelligently(text, options, target_size=800, max_size=1500):
     processed_text = pre_process_text(text, options)
     sentences = re.split(r'((?<![0-9\uff10-\uff19])\.(?![0-9\uff10-\uff19])|[？！?!\n])', processed_text)
-    
     rough_chunks = []
     for i in range(0, len(sentences) - 1, 2):
         chunk = sentences[i] + (sentences[i+1] if sentences[i+1] else '')
@@ -186,7 +171,6 @@ def split_text_intelligently(text, options, target_size=800, max_size=1500):
     if len(sentences) % 2 != 0 and sentences[-1].strip():
         rough_chunks.append(sentences[-1].strip())
     if not rough_chunks: return [processed_text] if processed_text.strip() else []
-
     final_chunks = []
     current_chunk = ""
     for chunk in rough_chunks:
@@ -200,7 +184,6 @@ def split_text_intelligently(text, options, target_size=800, max_size=1500):
             current_chunk = (current_chunk + " " + chunk_to_add) if current_chunk else chunk_to_add
     if current_chunk:
         final_chunks.append(current_chunk)
-    
     logger.info(f"Intelligently split text into {len(final_chunks)} high-quality chunks.")
     return final_chunks
 
@@ -271,13 +254,13 @@ def update_config():
     global config, MAX_CONCURRENT_REQUESTS
     try:
         new_data = request.get_json()
-        if not all(k in new_data for k in ['port', 'api_token', 'openai_voice_map', 'max_concurrent_requests']):
+        if not all(k in new_data for k in ['port', 'api_token', 'openai_voice_map', 'max_concurrent_requests', 'sync_api_filtering', 'default_cleaning_options']):
             return jsonify({"error": "Invalid data format"}), 400
         config.update(new_data)
         MAX_CONCURRENT_REQUESTS = config.get("max_concurrent_requests", 20)
         save_config_to_file(config)
         logger.info(f"Configuration updated. Max concurrent requests set to: {MAX_CONCURRENT_REQUESTS}")
-        return jsonify({"message": "设置已保存。音色映射、API Token和并发数立即生效，端口修改需重启服务才能应用。"})
+        return jsonify({"message": "设置已保存。"})
     except Exception as e:
         logger.error(f"Error updating config: {e}", exc_info=True)
         return jsonify({"error": "更新配置时发生内部错误。"}), 500
@@ -292,7 +275,15 @@ async def generate_speech():
         try:
             data = request.get_json()
             text, voice_name = data.get("input"), data.get("voice")
-            cleaning_options = data.get("cleaning_options", {})
+            
+            # 核心逻辑：决定使用哪套过滤规则
+            if config.get('sync_api_filtering', False):
+                cleaning_options = config.get('default_cleaning_options', {})
+                logger.info("API filtering sync is ON. Using default cleaning options from config.")
+            else:
+                cleaning_options = data.get("cleaning_options", {})
+                logger.info("API filtering sync is OFF. Using cleaning options from request body (if any).")
+            
             if not text or not voice_name: return jsonify({"error": {"message": "Parameters 'input' and 'voice' are required"}}), 400
 
             final_voice = config['openai_voice_map'].get(voice_name, voice_name)

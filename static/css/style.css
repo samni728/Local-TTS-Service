@@ -394,3 +394,19 @@ button:disabled {
   background-color: #444;
   text-decoration: none !important;
 }
+/* 新增: API 同步开关样式 */
+.api-sync-toggle {
+  background-color: #e7f1ff;
+  padding: 10px 15px;
+  border-radius: 6px;
+  margin-bottom: 15px;
+}
+.api-sync-toggle .checkbox-label {
+  font-weight: bold;
+  color: #0056b3;
+}
+hr {
+  border: none;
+  border-top: 1px solid #dee2e6;
+  margin: 15px 0;
+}
