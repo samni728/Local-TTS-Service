@@ -1,149 +1,88 @@
-# 🚀 LocalTTS - 高性能、高可靠的本地化 TTS 语音服务
+# 🚀 LocalTTS - 您私有的、高性能、高可用的语音合成服务
 
-一个基于 Microsoft Edge TTS 引擎的本地语音合成服务，经过深度优化，能以极高的效率和可靠性处理长文本。它提供了一个简洁的 Web 界面和一套兼容 OpenAI TTS API 格式的接口，让您可以轻松地将高质量、高效率的文本转语音功能集成到任何应用中。
+[![GitHub Repo stars](https://img.shields.io/github/stars/samni728/Local-TTS-Service?style=social)](https://github.com/samni728/Local-TTS-Service)
+
+**LocalTTS** 是一个基于 Microsoft Edge TTS 引擎的本地语音合成解决方案。它不仅仅是一个工具，更是一个**完整的、可私有化部署的语音中心**。我们对它进行了深度优化，能以惊人的效率和极高的可靠性处理超长文本，让您无论是想“听”一篇万字长文，还是为您的 AI 应用赋予动听的声音，都能轻松实现。
 
 ![LocalTTS WebUI 界面](./static/screen/s1.jpg)
 
 ---
 
-## ✨ 功能亮点
+## 🌟 为什么选择 LocalTTS？
 
-- **极致性能与可靠性**:
+我们倾注了大量心血，将 LocalTTS 打造成了一个功能强大且极易使用的服务。它不仅仅是“能用”，更是“好用”和“可靠”。
 
-  - **高级文本处理**: 采用先进算法对输入文本进行**净化和重组**，能智能处理不合理的换行符和空格，并正确识别小数点。
-  - **智能分块**: 在文本预处理的基础上，将长文本智能地合并成大小适中、语义连贯的块，**极大减少了拼接点**，显著提升了听感。
-  - **并发控制与可靠重试**: 使用异步信号量精确控制并发请求数量，既能享受并发带来的高效率，又避免了“并发风暴”和服务器限流。
-  - **可靠重试机制**: 对每一个文本块，都实现了带指数退避的多次重试机制，能有效应对网络波动和瞬时服务错误，最大程度保证音频内容的完整性。
-  - **闪电般拼接**: 使用系统级的 **FFmpeg** 进行音频流的无损拼接，速度是纯 Python 实现的数十倍，彻底解决超长文本合成时的本地处理瓶颈。
-  - **快速输出**: 实测处理 **3 万字** 的长文（生成约 1.5 小时音频），**总耗时仅需 1-2 分钟**，性能卓越。
+### 1. 为“听书”和长文档而生：极致性能
 
-- **安全与易用**:
+我们知道，您可能想用它来听一整本电子书或一份几十页的 PDF 报告。为此，我们打造了无与伦比的性能：
 
-  - **API 密钥保护**: 支持通过 WebUI 设置 API 密钥，保护您的服务不被滥用。
-  - **WebUI 登录保护**: 支持设置独立的 WebUI 访问密码，保障您的配置安全。
-  - **智能 API 指引**: API 使用说明中的 `curl` 示例会根据您的设置，**自动**包含或移除密钥认证头，方便复制和测试。
-  - **一键 Docker 部署**: 提供 `docker-compose` 配置，一条命令即可启动包含所有依赖（包括 FFmpeg）的完整服务。
+- **高级文本处理**: 自动净化和重组您复制粘贴的任何“脏”文本，智能处理不合理的换行和空格，确保听感流畅自然。
+- **并发与容错**: 采用工业级的并发控制和重试机制，即使面对超长文本和不稳定的网络，也能最大程度保证语音的完整生成。
+- **闪电般的速度**:
+  - **FFmpeg 无损拼接**: 我们用系统级的 FFmpeg 进行音频拼接，速度是普通 Python 方案的数十倍。
+  - **实测性能**: 处理一份 **3 万字** 的报告（约等于 20 页 A4 纸内容），生成长达 **1.5 小时**的高质量 MP3 音频，**总耗时仅需 1-2 分钟**！
 
-- **高度可配置与人性化**:
-  - **高级文本过滤**: 提供可折叠的过滤选项，允许用户一键移除 Markdown、URL、表情符号，或通过关键词列表进行自定义过滤，从源头上提升听感质量。
-    ![高级文本过滤选项](./static/screen/s2.jpg)
-  - **动态性能与安全设置**: 通过 WebUI 轻松设置服务端口、API 密钥和**并发请求数**。
-  - **自定义音色映射**: 通过 WebUI 为 OpenAI 的标准音色 (`shimmer`, `alloy` 等) 灵活指定您喜欢的任何 `edge-tts` 语音。
-    ![服务设置界面](./static/screen/s3.jpg)
+### 2. 为 AI 应用而造：无缝集成 OpenAI 生态
 
-## 🐳 使用 Docker 部署 (推荐)
+如果您是 AI 应用的开发者，LocalTTS 将是您完美的本地 TTS 替代方案：
+
+- **兼容 OpenAI API**: 提供与 OpenAI TTS (`v1/audio/speech`) 完全兼容的 API 接口。
+- **平替方案**: 您可以将 `Dify`, `LobeChat`, `LM Studio`, `Jan` 等任何支持 OpenAI TTS 接口的 AI 应用，无缝对接到 LocalTTS。只需修改 API 地址和模型名称，即可享受**免费、不限速、无内容审查**的本地语音合成服务。
+- **自定义音色映射**: 您可以通过 WebUI，将 OpenAI 的 `alloy`, `shimmer` 等标准音色，**自由映射**到您最喜欢的任何 EdgeTTS 语音上，打造独一无二的 AI 助手声音。
+
+### 3. 为所有人而设计：强大的可配置性与易用性
+
+我们相信，强大的功能不应以牺牲易用性为代价。
+
+- **一键 Docker 部署**: 对新手最友好的部署方式，屏蔽所有复杂环境配置。
+- **直观的 WebUI**:
+  - **动态配置中心**: 在网页上即可轻松设置端口、并发数、API 密钥。
+  - **强大的文本过滤器**: 一键移除 Markdown、URL、表情符号，或通过简单的关键词列表进行自定义过滤，让您对朗读内容拥有完全的控制权。
+    ![高级文本过滤与服务设置](./static/screen/s2.jpg)
+    ![OpenAI 音色映射配置](./static/screen/s3.jpg)
+- **双重安全保障**: 可选的 WebUI 登录密码和 API 密钥，确保您的服务在任何网络环境下都安全无虞。
+
+## 📖 使用场景
+
+LocalTTS 的可能性是无限的，这里仅列举几例：
+
+- **个人听书神器**: 将您下载的电子书（TXT, EPUB）、网上长文或工作报告（PDF）转换为有声读物，在通勤、锻炼时解放双眼。
+- **AI 应用语音赋能**: 为您的 `Dify` 应用、`LobeChat` 机器人或任何基于 LangChain/LLM 的项目，提供一个稳定、免费且高质量的语音输出后端。
+- **内容创作辅助**: 快速将您的文章草稿转换为音频，通过“听”的方式来校对文稿的流畅度和节奏感。
+- **学习与辅助工具**: 为视力障碍者或阅读困难者提供一个强大的文本朗读工具。
+
+## 🐳 快速开始：使用 Docker 部署 (推荐)
 
 这是最简单、最可靠的部署方式。**Docker 方案已内置 FFmpeg，您无需任何额外安装。**
 
-### 环境要求
-
-- **Docker**: [安装 Docker Desktop](https://www.docker.com/products/docker-desktop/) (适用于 Windows, macOS, 和 Linux)
-
 ### 部署步骤
 
-1.  **下载项目**
-    克隆或下载本项目所有文件到您的本地。
-
-2.  **创建并配置 `.env` 文件**
-
-    - 复制 `.env.example` 为 `.env`。
-    - **设置 WebUI 登录密码 (强烈推荐)**: 编辑 `.env` 文件，为 `WEBUI_PASSWORD` 设置一个复杂的密码。
-    - **端口配置 (可选)**: 修改 `TTS_PORT` 的值来指定端口（默认为 `5050`）。
-    - **国内用户网络优化 (重要)**: 如果您在中国大陆地区的服务器上部署，请取消 `.env` 文件中 `PIP_INDEX_URL` 和 `USE_CHINA_MIRRORS` 这两行的注释。
-
-3.  **启动服务**
-    在项目根目录下，打开终端或 PowerShell 并运行：
+1.  **下载项目**: `git clone https://github.com/samni728/Local-TTS-Service.git`
+2.  **创建并配置 `.env` 文件**:
+    - `cp .env.example .env`
+    - 编辑 `.env` 文件，**强烈建议设置 `WEBUI_PASSWORD`**。
+    - 如果您在国内服务器，请取消 `PIP_INDEX_URL` 和 `USE_CHINA_MIRRORS` 的注释。
+3.  **启动服务**:
 
     ```bash
-    # 首次启动或代码更新后，使用此命令构建并启动
+    # 首次启动或更新后
     docker-compose up --build -d
 
-    # 日后如果只是想重新启动服务，使用此命令即可
+    # 日常启动
     docker-compose up -d
     ```
 
-4.  **访问 WebUI**
-    - 打开浏览器，访问 `http://localhost:5050` (或您在 `.env` 中配置的端口)。
-    - **重要**: 首次启动后，强烈建议您进入 **服务设置**，设置您的 **API 密钥**并保存。
-
-### Docker 管理命令
-
-- **停止服务**: `docker-compose down`
-- **查看运行状态**: `docker ps`
-- **查看服务日志**: `docker-compose logs -f`
-
----
+4.  **访问与配置**:
+    - 打开浏览器访问 `http://localhost:5050` (或您设置的端口)。
+    - 登录后，进入**服务设置**，设置您的**API 密钥**并保存。
 
 ## 🛠️ 手动部署 (高级)
 
-### 环境要求
-
-- **Python**: 3.8 或更高版本
-- **FFmpeg**: **必须在您的系统中安装 FFmpeg。**
-- **Conda**: (推荐)
-
-### 1. 安装 FFmpeg (关键步骤)
-
-- **Windows**: 使用 Scoop (`scoop install ffmpeg`) 或 Chocolatey (`choco install ffmpeg`)。
-- **macOS**: 使用 Homebrew (`brew install ffmpeg`)。
-- **Linux (Debian/Ubuntu)**: `sudo apt update && sudo apt install ffmpeg`。
-  安装后，运行 `ffmpeg -version` 验证。
-
-### 2. 部署 Python 环境
-
-1.  **创建并激活 Conda 环境**:
-    ```bash
-    conda create -n local-tts python=3.10 -y
-    conda activate local-tts
-    ```
-2.  **安装 Python 依赖**:
-    ```bash
-    pip install -r requirements.txt
-    ```
-3.  **启动服务**:
-    ```bash
-    python app.py
-    ```
-
----
-
-## 📖 API 使用说明
-
-API 指引部分已集成在 WebUI 中，并能根据您的访问地址和密钥设置动态生成。
-![智能 API 指引界面](./static/screen/s4.jpg)
-
-### 端点
-
-- `POST /v1/audio/speech`
-
-### 请求格式
-
-- **Headers**:
-  - `Content-Type: application/json`
-  - `Authorization: Bearer <Your-API-Token>` (如果已在 WebUI 中设置)
-- **Body**:
-  ```json
-  {
-    "model": "tts-1",
-    "input": "要转换的文本。",
-    "voice": "shimmer",
-    "cleaning_options": {
-      "remove_markdown": true,
-      "remove_emoji": true,
-      "no_urls": true,
-      "no_line_breaks": false,
-      "custom_keywords": "关键词1,关键词2"
-    }
-  }
-  ```
-  - `voice`: 可以是 OpenAI 的标准音色 (`shimmer`, `alloy` 等)，也可以是任意 EdgeTTS 的完整音色名称 (如 `zh-CN-XiaoxiaoNeural`)。
-  - `cleaning_options`: (可选) 用于控制文本过滤。
-
----
+请参考 `README_ADVANCED.md`（我们可以将手动部署的详细步骤移至一个单独文件，保持主 README 的整洁）。
 
 ## 🤝 贡献
 
-欢迎任何形式的贡献！如果您有任何想法、建议或发现 Bug，请随时提交一个 Issue。
+欢迎任何形式的贡献！如果您有任何想法、建议或发现 Bug，请随时提交一个 Issue。如果这个项目对您有帮助，请在 GitHub 上给我们一颗 ⭐ Star！
 
 ## 📄 许可
 
