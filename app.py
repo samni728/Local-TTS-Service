@@ -15,6 +15,7 @@ import edge_tts
 from flask import Flask, request, jsonify, render_template, send_file, session, redirect, url_for
 from flask_cors import CORS
 from dotenv import load_dotenv
+import emoji # <--- 新增 emoji 库
 
 # --- 配置和初始化 ---
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] [%(levelname)s] - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
@@ -22,8 +23,6 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 app = Flask(__name__)
 CORS(app)
-
-# --- Session 安全密钥 ---
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', secrets.token_hex(24))
 
 # --- 配置文件路径与全局变量 ---
@@ -38,46 +37,41 @@ MAX_CONCURRENT_REQUESTS = 20
 # --- 数据加载与管理 ---
 def load_config_from_file():
     try:
-        with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return None
+        with open(CONFIG_FILE, 'r', encoding='utf-8') as f: return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError): return None
 
 def save_config_to_file(data):
-    with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=4, ensure_ascii=False)
+    with open(CONFIG_FILE, 'w', encoding='utf-8') as f: json.dump(data, f, indent=4, ensure_ascii=False)
 
 def initialize_config():
-    global config
+    global config, MAX_CONCURRENT_REQUESTS
+    default_config = {
+        "port": 5050, "api_token": "", "max_concurrent_requests": 20,
+        "openai_voice_map": { "shimmer": "zh-CN-XiaoxiaoNeural", "alloy": "en-US-AriaNeural", "fable": "zh-CN-shaanxi-XiaoniNeural", "onyx": "en-US-ChristopherNeural", "nova": "en-US-AvaNeural", "echo": "zh-CN-YunyangNeural" }
+    }
     loaded_config = load_config_from_file()
     if loaded_config is None:
-        logger.info(f"'{CONFIG_FILE}' not found or invalid, creating a default one.")
-        default_config = {
-            "port": 5050,
-            "api_token": "",
-            "openai_voice_map": {
-                "shimmer": "zh-CN-XiaoxiaoNeural",
-                "alloy": "en-US-AriaNeural",
-                "fable": "zh-CN-shaanxi-XiaoniNeural",
-                "onyx": "en-US-ChristopherNeural",
-                "nova": "en-US-AvaNeural",
-                "echo": "zh-CN-YunyangNeural"
-            }
-        }
-        save_config_to_file(default_config)
+        logger.info(f"'{CONFIG_FILE}' not found, creating a default one.")
         config = default_config
+        save_config_to_file(config)
     else:
+        updated = False
+        for key, value in default_config.items():
+            if key not in loaded_config:
+                loaded_config[key] = value
+                updated = True
         config = loaded_config
+        if updated: save_config_to_file(config)
+    MAX_CONCURRENT_REQUESTS = config.get("max_concurrent_requests", 20)
+    logger.info(f"Configuration loaded. Max concurrent requests set to: {MAX_CONCURRENT_REQUESTS}")
 
 def parse_voices():
     global ALL_VOICES, SUPPORTED_LOCALES
     try:
-        with open(VOICES_LIST_FILE, 'r', encoding='utf-8') as f:
-            voices_raw_data = f.read()
-        with open(LOCALES_MAP_FILE, 'r', encoding='utf-8') as f:
-            locale_display_names = json.load(f)
+        with open(VOICES_LIST_FILE, 'r', encoding='utf-8') as f: voices_raw_data = f.read()
+        with open(LOCALES_MAP_FILE, 'r', encoding='utf-8') as f: locale_display_names = json.load(f)
     except FileNotFoundError as e:
-        logger.error(f"Data file not found: {e}. Please ensure '{VOICES_LIST_FILE}' and '{LOCALES_MAP_FILE}' exist.")
+        logger.error(f"Data file not found: {e}.")
         return
 
     lines = voices_raw_data.strip().split('\n')
@@ -92,8 +86,7 @@ def parse_voices():
             voice_data = {"name": name, "gender": parts[1], "locale": locale, "short_name": '-'.join(locale_parts[2:])}
             ALL_VOICES.append(voice_data)
             locales_with_voices[locale].append(voice_data)
-        except IndexError:
-            logger.warning(f"Could not parse voice line: {line}")
+        except IndexError: logger.warning(f"Could not parse voice line: {line}")
     
     sorted_locales = sorted(locales_with_voices.keys(), key=lambda x: (x not in ['zh-CN', 'en-US'], locale_display_names.get(x, x)))
     for locale in sorted_locales:
@@ -107,13 +100,9 @@ def token_required(f):
         api_token = config.get('api_token')
         if api_token:
             auth_header = request.headers.get('Authorization')
-            if not auth_header or not auth_header.startswith('Bearer '):
-                return jsonify({"error": {"message": "Authorization header is missing or invalid."}}), 401
-            
+            if not auth_header or not auth_header.startswith('Bearer '): return jsonify({"error": {"message": "Authorization header is missing or invalid."}}), 401
             provided_token = auth_header.split(' ')[1]
-            if provided_token != api_token:
-                return jsonify({"error": {"message": "Invalid API token."}}), 403
-            
+            if provided_token != api_token: return jsonify({"error": {"message": "Invalid API token."}}), 403
         return await f(*args, **kwargs)
     return decorated_function
 
@@ -122,28 +111,72 @@ def login_required(f):
     def decorated_function(*args, **kwargs):
         webui_password = os.environ.get('WEBUI_PASSWORD')
         if webui_password and not session.get('logged_in'):
-            # 简化重定向，不再传递 next 参数，让前端处理
             return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated_function
 
-# --- 核心业务逻辑 ---
-def pre_process_text(text):
-    text = text.replace('\t', ' ').replace('\r', '')
-    text = re.sub(r' +', ' ', text)
-    lines = text.split('\n')
-    reunited_lines = []
-    for i, line in enumerate(lines):
-        line = line.strip()
-        if not line: continue
-        if reunited_lines and not reunited_lines[-1].strip().endswith(('。', '？', '！', '?', '!')):
-            reunited_lines[-1] += ' ' + line
-        else:
-            reunited_lines.append(line)
-    return '\n'.join(reunited_lines)
+# --- 核心业务逻辑 (V20: 采纳您的正确逻辑进行最终修复) ---
+def pre_process_text(text, options):
+    logger.info(f"Applying text cleaning with options: {options}")
+    
+    processed_text = text
 
-def split_text_intelligently(text, target_size=800, max_size=1500):
-    processed_text = pre_process_text(text)
+    # 移除 URL
+    if options.get('no_urls'):
+        processed_text = re.sub(r'http\S+|www\S+|https\S+', '', processed_text, flags=re.MULTILINE)
+
+    # 使用 emoji 库移除表情符号
+    if options.get('remove_emoji'):
+        processed_text = emoji.replace_emoji(processed_text, replace='')
+
+    # 移除 Markdown 语法 (采纳您的正确方案)
+    if options.get('remove_markdown'):
+        # 替换链接和图片为纯文本
+        processed_text = re.sub(r'\[!\[([^\]]*)\]\([^\)]+\)\]\([^\)]+\)', r'\1', processed_text) # 链接中的图片
+        processed_text = re.sub(r'!\[([^\]]*)\]\([^\)]+\)', r'\1', processed_text) # 图片，保留 alt 文本
+        processed_text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', processed_text) # 链接，保留链接文本
+
+        # 移除代码块
+        processed_text = re.sub(r'```[\s\S]*?```', '', processed_text)
+        processed_text = re.sub(r'`([^`]+)`', r'\1', processed_text)
+        
+        # 移除粗体、斜体
+        processed_text = re.sub(r'(\*\*|__)(.*?)\1', r'\2', processed_text)
+        processed_text = re.sub(r'(\*|_)(.*?)\1', r'\2', processed_text)
+        
+        # 移除标题、列表、引用、分隔线等格式符号
+        processed_text = re.sub(r'^\s*#+\s*', '', processed_text, flags=re.MULTILINE)
+        processed_text = re.sub(r'^\s*[\*\-]\s*|\s*\d+\.\s*', '', processed_text, flags=re.MULTILINE)
+        processed_text = re.sub(r'^\s*>\s?', '', processed_text, flags=re.MULTILINE)
+        processed_text = re.sub(r'^\s*[-*_]{3,}\s*$', '', processed_text, flags=re.MULTILINE)
+    
+    custom_keywords_str = options.get('custom_keywords', '')
+    if custom_keywords_str:
+        keywords = [re.escape(k.strip()) for k in custom_keywords_str.split(',') if k.strip()]
+        if keywords:
+            regex_pattern = '|'.join(keywords)
+            processed_text = re.sub(regex_pattern, '', processed_text)
+
+    # 智能重组断裂行
+    if not options.get('no_line_breaks'):
+        lines = processed_text.split('\n')
+        reunited_lines = []
+        for i, line in enumerate(lines):
+            line = line.strip()
+            if not line: continue
+            if reunited_lines and not reunited_lines[-1].strip().endswith(('。', '？', '！', '?', '!')):
+                reunited_lines[-1] += ' ' + line
+            else:
+                reunited_lines.append(line)
+        processed_text = '\n'.join(reunited_lines)
+    else:
+        processed_text = processed_text.replace('\n', ' ')
+
+    # 最后，清理所有多余的空格和制表符
+    return re.sub(r' +', ' ', processed_text.replace('\t', ' ')).strip()
+
+def split_text_intelligently(text, options, target_size=800, max_size=1500):
+    processed_text = pre_process_text(text, options)
     sentences = re.split(r'((?<![0-9\uff10-\uff19])\.(?![0-9\uff10-\uff19])|[？！?!\n])', processed_text)
     
     rough_chunks = []
@@ -165,7 +198,6 @@ def split_text_intelligently(text, target_size=800, max_size=1500):
             current_chunk = chunk_to_add
         else:
             current_chunk = (current_chunk + " " + chunk_to_add) if current_chunk else chunk_to_add
-            
     if current_chunk:
         final_chunks.append(current_chunk)
     
@@ -183,14 +215,12 @@ async def text_to_speech_with_retry(semaphore, chunk_index, text_chunk, voice, t
                 temp_file_path = os.path.join(temp_dir, f"segment_{chunk_index}.mp3")
                 with open(temp_file_path, "wb") as temp_file:
                     async for chunk in communicate.stream():
-                        if chunk["type"] == "audio":
-                            temp_file.write(chunk["data"])
+                        if chunk["type"] == "audio": temp_file.write(chunk["data"])
                 if os.path.getsize(temp_file_path) > 0:
                     elapsed_time = time.time() - task_start_time
                     logger.info(f"  [Task {chunk_index+1}] Successfully generated in {elapsed_time:.2f}s.")
                     return temp_file_path
-                else:
-                    raise edge_tts.NoAudioReceived("No audio was received (empty file).")
+                else: raise edge_tts.NoAudioReceived("No audio was received (empty file).")
             except Exception as e:
                 logger.warning(f"  [Task {chunk_index+1}] Attempt {attempt + 1}/{max_retries} failed. Error: {e}")
                 if attempt + 1 == max_retries:
@@ -210,23 +240,16 @@ def index():
 def login():
     error = None
     webui_password = os.environ.get('WEBUI_PASSWORD')
-    if not webui_password:
-        return redirect(url_for('index'))
-    
-    if session.get('logged_in'):
-        return redirect(url_for('index'))
-        
+    if not webui_password: return redirect(url_for('index'))
+    if session.get('logged_in'): return redirect(url_for('index'))
     if request.method == 'POST':
         if request.form.get('password') == webui_password:
             session['logged_in'] = True
             next_url = request.form.get('next')
-            # 只有当 next_url 存在且看起来像一个合法的 URL 时才跳转，否则跳转到主页
-            if next_url and (next_url.startswith('/') or next_url.startswith('http')):
-                 return redirect(next_url)
+            if next_url and (next_url.startswith('/') or next_url.startswith('http')): return redirect(next_url)
             return redirect(url_for('index'))
         else:
             error = '密码错误，请重试。'
-    # 渲染登录模板，不需要传递 next 参数，因为前端 JS 会自己处理
     return render_template('login.html', error=error)
 
 @app.route('/logout')
@@ -236,26 +259,25 @@ def logout():
 
 @app.route('/v1/audio/all_voices', methods=['GET'])
 @login_required
-def get_all_voices():
-    return jsonify(ALL_VOICES)
+def get_all_voices(): return jsonify(ALL_VOICES)
 
 @app.route('/v1/config', methods=['GET'])
 @login_required
-def get_config():
-    return jsonify(config)
+def get_config(): return jsonify(config)
 
 @app.route('/v1/config', methods=['POST'])
 @login_required
 def update_config():
-    global config
+    global config, MAX_CONCURRENT_REQUESTS
     try:
         new_data = request.get_json()
-        if not all(k in new_data for k in ['port', 'api_token', 'openai_voice_map']):
+        if not all(k in new_data for k in ['port', 'api_token', 'openai_voice_map', 'max_concurrent_requests']):
             return jsonify({"error": "Invalid data format"}), 400
         config.update(new_data)
+        MAX_CONCURRENT_REQUESTS = config.get("max_concurrent_requests", 20)
         save_config_to_file(config)
-        logger.info("Configuration updated and saved successfully.")
-        return jsonify({"message": "设置已保存。音色映射和API Token立即生效，端口修改需重启服务才能应用。"})
+        logger.info(f"Configuration updated. Max concurrent requests set to: {MAX_CONCURRENT_REQUESTS}")
+        return jsonify({"message": "设置已保存。音色映射、API Token和并发数立即生效，端口修改需重启服务才能应用。"})
     except Exception as e:
         logger.error(f"Error updating config: {e}", exc_info=True)
         return jsonify({"error": "更新配置时发生内部错误。"}), 500
@@ -270,14 +292,13 @@ async def generate_speech():
         try:
             data = request.get_json()
             text, voice_name = data.get("input"), data.get("voice")
-            if not text or not voice_name:
-                return jsonify({"error": {"message": "Parameters 'input' and 'voice' are required"}}), 400
+            cleaning_options = data.get("cleaning_options", {})
+            if not text or not voice_name: return jsonify({"error": {"message": "Parameters 'input' and 'voice' are required"}}), 400
 
             final_voice = config['openai_voice_map'].get(voice_name, voice_name)
             logger.info("[Step 1/4] Pre-processing and splitting text into chunks...")
-            text_chunks = split_text_intelligently(text)
-            if not text_chunks:
-                return jsonify({"error": {"message": "Input text is empty."}}), 400
+            text_chunks = split_text_intelligently(text, cleaning_options)
+            if not text_chunks: return jsonify({"error": {"message": "Input text is empty."}}), 400
 
             logger.info(f"[Step 2/4] Starting TTS generation with concurrency limit: {MAX_CONCURRENT_REQUESTS}...")
             semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
@@ -292,14 +313,12 @@ async def generate_speech():
             failed_chunks_indices = []
             with open(list_file_path, "w", encoding='utf-8') as f:
                 for i, path in enumerate(temp_file_paths):
-                    if path:
-                        f.write(f"file '{os.path.basename(path)}'\n")
+                    if path: f.write(f"file '{os.path.basename(path)}'\n")
                     else:
                         silent_path = os.path.join(temp_dir, f"silent_{i}.mp3")
                         subprocess.run(["ffmpeg", "-y", "-f", "lavfi", "-i", "anullsrc=r=24000:cl=mono", "-t", "0.2", "-q:a", "9", silent_path], check=True, capture_output=True)
                         f.write(f"file '{os.path.basename(silent_path)}'\n")
                         failed_chunks_indices.append(i + 1)
-
             output_file_path = os.path.join(temp_dir, "final_output.mp3")
             ffmpeg_command = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_file_path, "-c", "copy", output_file_path]
             process = await asyncio.create_subprocess_exec(*ffmpeg_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -307,9 +326,9 @@ async def generate_speech():
             if process.returncode != 0:
                 logger.error(f"FFmpeg failed with return code {process.returncode}.\nFFmpeg stderr:\n{stderr.decode(errors='ignore')}")
                 return jsonify({"error": {"message": "Failed to stitch audio files. Check server logs."}}), 500
-
             stitching_duration = time.time() - stitching_start_time
             logger.info(f"Stitching complete in {stitching_duration:.2f}s.")
+
             logger.info("[Step 4/4] Exporting final audio and sending response...")
             with open(output_file_path, 'rb') as f: final_audio_data = f.read()
             final_audio_stream = BytesIO(final_audio_data)

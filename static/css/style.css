@@ -84,7 +84,7 @@ textarea {
   resize: vertical;
 }
 
-/* Buttons, Spinners, and Checkbox */
+/* Buttons and Spinners */
 button {
   width: 100%;
   padding: 15px;
@@ -126,14 +126,6 @@ button:disabled {
   height: 20px;
   animation: spin 1s linear infinite;
 }
-.spinner-wrapper {
-  display: flex;
-  justify-content: center;
-  padding: 20px;
-}
-.spinner-wrapper .spinner {
-  border-top-color: #007bff;
-}
 @keyframes spin {
   0% {
     transform: rotate(0deg);
@@ -155,7 +147,33 @@ button:disabled {
   transform: scale(1.2);
 }
 
-/* Audio Player and Feedback Messages */
+/* Progress Bar, Audio Player, and Feedback Messages */
+.progress-container {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-top: 20px;
+}
+.progress-bar-wrapper {
+  flex-grow: 1;
+  height: 12px;
+  background-color: #e9ecef;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.progress-bar {
+  width: 0%;
+  height: 100%;
+  background-color: #007bff;
+  transition: width 0.4s ease-in-out;
+  border-radius: 6px;
+}
+.progress-text {
+  font-weight: 600;
+  color: #495057;
+  min-width: 45px;
+  text-align: right;
+}
 .audio-container {
   display: flex;
   align-items: center;
@@ -195,10 +213,22 @@ button:disabled {
 
 /* Collapsible Sections */
 .collapsible-section {
-  margin-top: 25px;
+  margin-top: 20px;
   border: 1px solid #dee2e6;
   border-radius: 8px;
   overflow: hidden;
+}
+.collapsible-section.small {
+  margin-top: 10px;
+  margin-bottom: 20px;
+}
+.collapsible-section.small summary {
+  font-size: 16px;
+  padding: 10px 15px;
+}
+.collapsible-section.small .details-content {
+  padding: 15px;
+  font-size: 14px;
 }
 .collapsible-section summary {
   font-size: 18px;
@@ -273,6 +303,14 @@ button:disabled {
   margin-top: 5px;
   padding-right: 5px;
 }
+.settings-hint {
+  font-size: 13px;
+  color: #6c757d;
+  margin-top: 10px;
+  margin-bottom: 20px;
+  text-align: center;
+  grid-column: 1 / -1;
+}
 
 /* Specific new styles */
 .input-with-button {
@@ -307,6 +345,17 @@ button:disabled {
   height: auto;
   align-self: stretch;
   padding: 0 12px;
+}
+.option-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+}
+.settings-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  align-items: flex-start;
 }
 
 /* Footer */

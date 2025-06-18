@@ -8,5 +8,6 @@
         "onyx": "en-US-ChristopherNeural",
         "nova": "en-US-AvaNeural",
         "echo": "zh-CN-YunyangNeural"
-    }
+    },
+    "max_concurrent_requests": 10
 }

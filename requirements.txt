@@ -4,6 +4,8 @@ flask>=2.3.0
 flask-cors>=4.0.0
 python-dotenv>=1.0.0
 asgiref>=3.7.2
-
-# 'requests' 是 edge-tts 的子依赖，但保留它也无害。
 requests>=2.31.0
+
+# 高级文本清洗与 Emoji 处理库
+cleantext>=1.1.4
+emoji>=2.0.0

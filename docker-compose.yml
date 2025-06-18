@@ -7,6 +7,7 @@ services:
       args:
         # 将宿主机的环境变量传递给 Docker 构建过程
         - PIP_INDEX_URL
+        - USE_CHINA_MIRRORS # <--- 新增 APT 镜像开关
     container_name: local-tts-service
     ports:
       - "${TTS_PORT:-5050}:5050"

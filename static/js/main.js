@@ -3,6 +3,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let allVoices = [];
   let currentConfig = {};
   let lastGeneratedBlobUrl = null;
+  let progressInterval = null; // 用于存储进度条的 interval ID
   const OPENAI_VOICE_ALIASES = [
     "shimmer",
     "alloy",
@@ -31,6 +32,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const settingsFeedback = document.getElementById("settings-feedback");
   const charCounter = document.getElementById("char-counter");
   const autoPlayCheckbox = document.getElementById("auto-play");
+  const concurrencyInput = document.getElementById("concurrency-input");
+  const progressContainer = document.getElementById("progress-container");
+  const progressBar = document.getElementById("progress-bar");
+  const progressText = document.getElementById("progress-text");
 
   // 3. 功能函数
   const showMessage = (element, message, isError = false) => {
@@ -44,11 +49,34 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const setLoading = (isLoading) => {
     speakButton.disabled = isLoading;
+    // 在加载时，我们不再显示按钮内的 spinner，而是显示外部的进度条
     const buttonText = speakButton.querySelector(".button-text");
-    const spinner = speakButton.querySelector(".spinner");
-    if (buttonText)
-      buttonText.style.display = isLoading ? "none" : "inline-flex";
-    if (spinner) spinner.style.display = isLoading ? "block" : "none";
+    if (buttonText) buttonText.style.display = "inline-flex";
+
+    if (isLoading) {
+      progressContainer.style.display = "flex";
+      let progress = 0;
+      progressBar.style.width = "0%";
+      progressText.textContent = "0%";
+
+      // 启动智能心跳进度条
+      if (progressInterval) clearInterval(progressInterval);
+      progressInterval = setInterval(() => {
+        if (progress < 95) {
+          const increment = progress < 50 ? 1 : progress < 80 ? 0.5 : 0.2;
+          progress = Math.min(progress + increment, 95); // 确保不超过95%
+          progressBar.style.width = `${progress}%`;
+          progressText.textContent = `${Math.floor(progress)}%`;
+        }
+      }, 500);
+    } else {
+      if (progressInterval) clearInterval(progressInterval);
+      progressBar.style.width = "100%";
+      progressText.textContent = "100%";
+      setTimeout(() => {
+        progressContainer.style.display = "none";
+      }, 1000);
+    }
   };
 
   const updateApiExamples = () => {
@@ -57,10 +85,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const apiEndpointDisplay = document.getElementById("api-endpoint-display");
     const curlExampleOpenAI = document.getElementById("curl-example-openai");
     const curlExampleDirect = document.getElementById("curl-example-direct");
-
     const token = apiTokenInput.value.trim();
     const authHeader = token ? ` \\\n-H "Authorization: Bearer ${token}"` : "";
-
     if (apiEndpointDisplay) apiEndpointDisplay.textContent = apiUrl;
     if (curlExampleOpenAI)
       curlExampleOpenAI.textContent = `curl -X POST ${apiUrl}${authHeader} \\\n-H "Content-Type: application/json" \\\n-d '{\n  "model": "tts-1",\n  "input": "你好，这是一个兼容 OpenAI 的测试。",\n  "voice": "shimmer"\n}' --output openai_test.mp3`;
@@ -88,6 +114,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const populateSettingsForm = () => {
     portInput.value = currentConfig.port;
     apiTokenInput.value = currentConfig.api_token || "";
+    concurrencyInput.value = currentConfig.max_concurrent_requests;
     mappingsContainer.innerHTML = "";
     OPENAI_VOICE_ALIASES.forEach((alias) => {
       const currentMapping = currentConfig.openai_voice_map[alias];
@@ -111,6 +138,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const newConfig = {
       port: parseInt(portInput.value, 10),
       api_token: apiTokenInput.value.trim(),
+      max_concurrent_requests: parseInt(concurrencyInput.value, 10),
       openai_voice_map: {},
     };
     OPENAI_VOICE_ALIASES.forEach(
@@ -138,9 +166,9 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   const handleSpeakClick = async () => {
-    const text = textInput.value.trim();
+    const text = textInput.value;
     const voice = voiceSelect.value;
-    if (!text) {
+    if (!text.trim()) {
       showMessage(errorMessage, "请输入文本内容。", true);
       return;
     }
@@ -159,15 +187,34 @@ document.addEventListener("DOMContentLoaded", () => {
         headers["Authorization"] = `Bearer ${currentConfig.api_token}`;
       }
 
+      const cleaningOptions = {};
+      document
+        .querySelectorAll('#cleaning-options input[type="checkbox"]')
+        .forEach((checkbox) => {
+          cleaningOptions[checkbox.name] = checkbox.checked;
+        });
+      cleaningOptions["custom_keywords"] =
+        document.getElementById("custom-keywords").value;
+
       const response = await fetch("/v1/audio/speech", {
         method: "POST",
         headers: headers,
-        body: JSON.stringify({ model: "tts-1", input: text, voice: voice }),
+        body: JSON.stringify({
+          model: "tts-1",
+          input: text,
+          voice: voice,
+          cleaning_options: cleaningOptions,
+        }),
       });
 
-      if (response.status === 401 || response.status === 403) {
+      setLoading(false); // 无论成功失败，都停止进度条
+
+      if (response.status >= 400) {
         const errorData = await response.json();
-        throw new Error(errorData.error?.message || "API Token 验证失败。");
+        throw new Error(
+          errorData.error?.message ||
+            `服务器返回错误 (状态码: ${response.status})`
+        );
       }
 
       if (response.ok) {
@@ -182,13 +229,11 @@ document.addEventListener("DOMContentLoaded", () => {
         audioContainer.style.display = "flex";
         if (autoPlayCheckbox.checked) audioPlayer.play();
       } else {
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || "发生未知错误。");
+        throw new Error("发生未知网络错误。");
       }
     } catch (error) {
+      setLoading(false); // 确保在捕获到异常时也停止进度条
       showMessage(errorMessage, `语音生成失败: ${error.message}`, true);
-    } finally {
-      setLoading(false);
     }
   };
 
