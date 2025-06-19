@@ -6,7 +6,7 @@ _English version available in [README.md](README.md)._
 
 **LocalTTS** 是一个基于 Microsoft Edge TTS 引擎的本地语音合成解决方案。它不仅仅是一个工具，更是一个**完整的、可私有化部署的语音中心**。我们对它进行了深度优化，能以惊人的效率和极高的可靠性处理超长文本，让您无论是想“听”一篇万字长文，还是为您的 AI 应用赋予动听的声音，都能轻松实现。
 
-![LocalTTS WebUI 界面](./static/screen/s1.jpg)
+![LocalTTS WebUI 界面](./static/screen/c1.jpg)
 
 ---
 
@@ -40,8 +40,8 @@ _English version available in [README.md](README.md)._
 - **直观的 WebUI**:
   - **动态配置中心**: 在网页上即可轻松设置端口、并发数、API 密钥。
   - **强大的文本过滤器**: 一键移除 Markdown、URL、表情符号，或通过简单的关键词列表进行自定义过滤，让您对朗读内容拥有完全的控制权。
-    ![高级文本过滤与服务设置](./static/screen/s2.jpg)
-    ![OpenAI 音色映射配置](./static/screen/s3.jpg)
+    ![高级文本过滤与服务设置](./static/screen/c2.jpg)
+    ![OpenAI 音色映射配置](./static/screen/c3.jpg)
 - **双重安全保障**: 可选的 WebUI 登录密码和 API 密钥，确保您的服务在任何网络环境下都安全无虞。
 
 ## 📖 使用场景
@@ -74,10 +74,8 @@ LocalTTS 的可能性是无限的，这里仅列举几例：
     docker-compose up -d
     ```
 
-4.  **访问与配置**:
-    - 打开浏览器访问 `http://localhost:5050` (或您设置的端口)。
-    - 登录后，进入**服务设置**，设置您的**API 密钥**并保存。
-
+4.  **访问与配置**: - 打开浏览器访问 `http://localhost:5050` (或您设置的端口)。 - 登录后，进入**服务设置**，设置您的**API 密钥**并保存。
+    ![LocalTTS api 界面](./static/screen/c4.jpg)
 
 ## 🤝 贡献
 

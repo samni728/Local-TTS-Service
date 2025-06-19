@@ -8,7 +8,7 @@
 
 ---
 
-_For the Chinese version of this document, please see [README.zh.md](README.zh.md)._ 
+_For the Chinese version of this document, please see [README.zh.md](README.zh.md)._
 
 ## 🌟 Why choose LocalTTS?
 
@@ -74,9 +74,8 @@ docker-compose up --build -d
 docker-compose up -d
 ```
 
-4.  **Access & configure**:
-    - Visit `http://localhost:5050` (or your chosen port) in your browser.
-    - After logging in, open **Service Settings**, set your **API key**, and save.
+4.  **Access & configure**: - Visit `http://localhost:5050` (or your chosen port) in your browser. - After logging in, open **Service Settings**, set your **API key**, and save.
+    ![LocalTTS api UI](./static/screen/c4.jpg)
 
 ## 🤝 Contributing
 
