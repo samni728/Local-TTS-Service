@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', () => {
+function initCommon() {
   const translations = {
     zh: {
       title: '本地多语言 TTS 服务',
@@ -128,6 +128,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function applyTheme(theme) {
     document.body.classList.toggle('dark-theme', theme === 'dark');
+    document.documentElement.classList.toggle('dark', theme === 'dark');
   }
 
   function applyLang(lang) {
@@ -149,4 +150,10 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
-});
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initCommon);
+} else {
+  initCommon();
+}

@@ -5,82 +5,42 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title data-i18n="login_title">登录 - 本地 TTS 服务</title>
     <link
+      href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css"
       rel="stylesheet"
-      href="{{ url_for('static', filename='css/style.css') }}"
     />
-    <style>
-      body {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        flex-direction: column;
-        height: 100vh;
-      }
-      .login-container {
-        width: 100%;
-        max-width: 420px;
-        text-align: center;
-        padding: 40px;
-        margin: 0;
-      }
-      .login-container h1 {
-        font-size: 2rem;
-        margin-bottom: 10px;
-      }
-      .login-container p {
-        text-align: center;
-        color: #6c757d;
-        margin-bottom: 30px;
-      }
-      .login-container .form-group {
-        text-align: left;
-      }
-      .login-container button {
-        margin-top: 10px;
-      }
-      .site-footer {
-        max-width: 420px;
-        padding: 0;
-        border-top: none;
-        position: absolute;
-        bottom: 30px;
-      }
-    </style>
   </head>
-  <body>
-    <div class="top-bar">
-      <button id="theme-toggle" title="Toggle theme">🌙</button>
-      <button id="lang-toggle">EN</button>
+  <body class="min-h-screen flex flex-col items-center justify-center bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200">
+    <div class="absolute top-2 right-4 flex gap-2">
+      <button id="theme-toggle" title="Toggle theme" class="px-3 py-1 rounded-xl shadow-md bg-green-500 text-white transition-all hover:bg-green-600">🌙</button>
+      <button id="lang-toggle" class="px-3 py-1 rounded-xl shadow-md bg-green-500 text-white transition-all hover:bg-green-600">EN</button>
     </div>
-    <div class="container login-container">
-      <h1 data-i18n="login_header">登录到 TTS 服务</h1>
-      <p data-i18n="login_tip">此服务已启用密码保护。</p>
+    <div class="bg-white dark:bg-gray-800 shadow-md rounded-xl p-8 w-full max-w-md text-center">
+      <h1 class="text-2xl font-bold mb-2" data-i18n="login_header">登录到 TTS 服务</h1>
+      <p class="text-gray-600 dark:text-gray-400 mb-6" data-i18n="login_tip">此服务已启用密码保护。</p>
       <form method="post" id="login-form">
         <input type="hidden" name="next" id="next-url" />
-        <div class="form-group">
-          <label for="password" data-i18n="password_label">密码:</label>
+        <div class="mb-4 text-left">
+          <label for="password" class="font-semibold mb-1 block" data-i18n="password_label">密码:</label>
           <input
             type="password"
             id="password"
             name="password"
-            class="settings-input"
+            class="w-full p-2 border rounded-xl dark:bg-gray-700 dark:border-gray-600"
             required
             autofocus
           />
         </div>
         {% if error %}
-        <div class="error" style="display: block">{{ error }}</div>
+        <div class="bg-red-200 text-red-700 p-3 rounded-xl" style="display: block">{{ error }}</div>
         {% endif %}
-        <button type="submit" data-i18n="login_button">登 录</button>
+        <button type="submit" class="w-full mt-2 px-4 py-2 rounded-xl bg-green-500 text-white shadow-md hover:bg-green-600" data-i18n="login_button">登 录</button>
       </form>
     </div>
 
-    <footer class="site-footer">
-      <p style="text-align: center; font-size: 13px">
-        <a href="https://github.com/samni728/Local-TTS-Service" target="_blank">
-          Local-TTS-Service on GitHub
-        </a>
-      </p>
+    <footer class="mt-8 text-center text-sm text-gray-600 dark:text-gray-400">
+      <a href="https://github.com/samni728/Local-TTS-Service" target="_blank" class="underline">
+        Local-TTS-Service on GitHub
+      </a>
     </footer>
 
     <script src="{{ url_for('static', filename='js/common.js') }}"></script>
