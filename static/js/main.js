@@ -34,6 +34,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const filteringFeedback = document.getElementById("filtering-feedback");
   const charCounter = document.getElementById("char-counter");
   const autoPlayCheckbox = document.getElementById("auto-play");
+  const streamPlayCheckbox = document.getElementById("stream-play");
   const concurrencyInput = document.getElementById("concurrency-input");
   const chunkSizeInput = document.getElementById("chunk-size-input");
   const progressContainer = document.getElementById("progress-container");
@@ -212,6 +213,7 @@ document.addEventListener("DOMContentLoaded", () => {
     setLoading(true);
     errorMessage.style.display = "none";
     audioContainer.style.display = "none";
+    downloadLink.style.display = streamPlayCheckbox.checked ? "none" : "";
 
     try {
       const headers = { "Content-Type": "application/json" };
@@ -236,10 +238,9 @@ document.addEventListener("DOMContentLoaded", () => {
           input: text,
           voice: voice,
           cleaning_options: cleaningOptions,
+          stream: streamPlayCheckbox.checked,
         }),
       });
-
-      setLoading(false);
 
       if (response.status >= 400) {
         const errorData = await response.json();
@@ -249,14 +250,50 @@ document.addEventListener("DOMContentLoaded", () => {
         );
       }
       if (response.ok) {
-        const blob = await response.blob();
-        if (blob.size === 0) throw new Error("服务器返回了空的音频文件。");
-        if (lastGeneratedBlobUrl) URL.revokeObjectURL(lastGeneratedBlobUrl);
-        lastGeneratedBlobUrl = URL.createObjectURL(blob);
-        audioPlayer.src = lastGeneratedBlobUrl;
-        downloadLink.href = lastGeneratedBlobUrl;
         audioContainer.style.display = "flex";
-        if (autoPlayCheckbox.checked) audioPlayer.play();
+        if (streamPlayCheckbox.checked) {
+          const mediaSource = new MediaSource();
+          if (lastGeneratedBlobUrl) URL.revokeObjectURL(lastGeneratedBlobUrl);
+          lastGeneratedBlobUrl = URL.createObjectURL(mediaSource);
+          audioPlayer.src = lastGeneratedBlobUrl;
+          audioPlayer.play();
+          mediaSource.addEventListener("sourceopen", () => {
+            const sourceBuffer = mediaSource.addSourceBuffer("audio/mpeg");
+            const reader = response.body.getReader();
+            const pump = () => {
+              reader.read().then(({ done, value }) => {
+                if (done) {
+                  const finalize = () => {
+                    mediaSource.endOfStream();
+                    setLoading(false);
+                  };
+                  if (sourceBuffer.updating) {
+                    sourceBuffer.addEventListener("updateend", finalize, { once: true });
+                  } else {
+                    finalize();
+                  }
+                  return;
+                }
+                sourceBuffer.appendBuffer(value);
+                if (sourceBuffer.updating) {
+                  sourceBuffer.addEventListener("updateend", pump, { once: true });
+                } else {
+                  pump();
+                }
+              });
+            };
+            pump();
+          });
+        } else {
+          const blob = await response.blob();
+          if (blob.size === 0) throw new Error("服务器返回了空的音频文件。");
+          if (lastGeneratedBlobUrl) URL.revokeObjectURL(lastGeneratedBlobUrl);
+          lastGeneratedBlobUrl = URL.createObjectURL(blob);
+          audioPlayer.src = lastGeneratedBlobUrl;
+          downloadLink.href = lastGeneratedBlobUrl;
+          if (autoPlayCheckbox.checked) audioPlayer.play();
+          setLoading(false);
+        }
       } else {
         throw new Error("发生未知网络错误。");
       }
@@ -302,6 +339,20 @@ document.addEventListener("DOMContentLoaded", () => {
         updateApiExamples();
       });
       apiTokenInput.addEventListener("input", updateApiExamples);
+      autoPlayCheckbox.addEventListener("change", () => {
+        if (autoPlayCheckbox.checked) {
+          streamPlayCheckbox.checked = false;
+          downloadLink.style.display = "";
+        }
+      });
+      streamPlayCheckbox.addEventListener("change", () => {
+        if (streamPlayCheckbox.checked) {
+          autoPlayCheckbox.checked = false;
+          downloadLink.style.display = "none";
+        } else {
+          downloadLink.style.display = "";
+        }
+      });
       saveSettingsButton.addEventListener("click", () =>
         saveConfig(settingsFeedback)
       );
