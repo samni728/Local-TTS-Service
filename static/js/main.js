@@ -30,6 +30,8 @@ document.addEventListener("DOMContentLoaded", () => {
   );
   const settingsFeedback = document.getElementById("settings-feedback");
   const saveSettingsButton = document.getElementById("save-settings-button");
+  const saveFilteringButton = document.getElementById("save-filtering-button");
+  const filteringFeedback = document.getElementById("filtering-feedback");
   const charCounter = document.getElementById("char-counter");
   const autoPlayCheckbox = document.getElementById("auto-play");
   const concurrencyInput = document.getElementById("concurrency-input");
@@ -169,6 +171,7 @@ document.addEventListener("DOMContentLoaded", () => {
     return newConfig;
   };
 
+  const saveConfig = (feedbackTarget) => {
   const saveConfig = () => {
     const newConfig = collectConfig();
 
@@ -184,6 +187,11 @@ document.addEventListener("DOMContentLoaded", () => {
       .then((result) => {
         console.log("Config saved:", result.message);
         currentConfig = newConfig;
+
+        showMessage(feedbackTarget, "设置已保存");
+      })
+      .catch((error) =>
+        showMessage(feedbackTarget, "保存设置失败!", true)
         showMessage(settingsFeedback, "设置已保存");
       })
       .catch((error) =>
@@ -293,7 +301,12 @@ document.addEventListener("DOMContentLoaded", () => {
         updateApiExamples();
       });
       apiTokenInput.addEventListener("input", updateApiExamples);
-
+      saveSettingsButton.addEventListener("click", () =>
+        saveConfig(settingsFeedback)
+      );
+      saveFilteringButton.addEventListener("click", () =>
+        saveConfig(filteringFeedback)
+      );
       saveSettingsButton.addEventListener("click", saveConfig);
 
       const defaultLang = "zh-CN";

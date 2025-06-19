@@ -286,6 +286,13 @@ button:disabled {
 #save-settings-button:hover {
   background-color: #218838;
 }
+#save-filtering-button {
+  margin-top: 20px;
+  background-color: #28a745;
+}
+#save-filtering-button:hover {
+  background-color: #218838;
+}
 .details-content pre {
   background-color: #e9ecef;
   padding: 15px;
