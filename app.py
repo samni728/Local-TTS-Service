@@ -195,7 +195,11 @@ async def text_to_speech_with_retry(semaphore, chunk_index, text_chunk, voice, t
     logger.info(f"  [Task {chunk_index+1}] Starting processing for chunk: '{text_chunk[:30]}...'")
     for attempt in range(max_retries):
         try:
+            logger.info(
+                f"  [Task {chunk_index+1}] Attempt {attempt + 1}/{max_retries} acquiring semaphore..."
+            )
             async with semaphore:
+                logger.info(f"  [Task {chunk_index+1}] Acquired semaphore. Starting TTS request...")
                 communicate = edge_tts.Communicate(text_chunk, voice)
                 temp_file_path = os.path.join(temp_dir, f"segment_{chunk_index}.mp3")
                 with open(temp_file_path, "wb") as temp_file:
@@ -205,23 +209,41 @@ async def text_to_speech_with_retry(semaphore, chunk_index, text_chunk, voice, t
             if os.path.getsize(temp_file_path) > 0:
                 elapsed_time = time.time() - task_start_time
                 logger.info(
-                    f"  [Task {chunk_index+1}] Successfully generated in {elapsed_time:.2f}s."
+                    f"  [Task {chunk_index+1}] Successfully generated in {elapsed_time:.2f}s after {attempt + 1} attempt(s)."
                 )
-                return temp_file_path
+                logger.info(f"  [Task {chunk_index+1}] Done. Total retry attempts: {attempt + 1}")
+                return temp_file_path, attempt + 1, elapsed_time
             else:
                 raise edge_tts.NoAudioReceived("No audio was received (empty file).")
         except Exception as e:
-            logger.warning(
-                f"  [Task {chunk_index+1}] Attempt {attempt + 1}/{max_retries} failed. Error: {e}"
-            )
+            logger.warning(f"  [Task {chunk_index+1}] Attempt {attempt + 1} failed: {e}")
             if attempt + 1 == max_retries:
+                elapsed_time = time.time() - task_start_time
                 logger.error(
                     f"  [Task {chunk_index+1}] Failed after {max_retries} attempts. Giving up."
                 )
-                return None
+                logger.info(f"  [Task {chunk_index+1}] Done. Total retry attempts: {attempt + 1}")
+                return None, attempt + 1, elapsed_time
             wait_time = min(2 ** attempt, 8)
-            logger.info(f"  [Task {chunk_index+1}] Retrying in {wait_time} second(s)...")
+            logger.info(f"  [Task {chunk_index+1}] Retrying after {wait_time:.2f}s...")
             await asyncio.sleep(wait_time)
+
+async def run_tts(text_chunks, voice, temp_dir):
+    logger.info(f"[Step 2/4] Starting TTS generation with concurrency limit: {MAX_CONCURRENT_REQUESTS}...")
+    semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
+    start_time = time.time()
+    tasks = [text_to_speech_with_retry(semaphore, i, chunk, voice, temp_dir) for i, chunk in enumerate(text_chunks)]
+    results = await asyncio.gather(*tasks)
+    total_time = time.time() - start_time
+    durations = [r[2] for r in results if r is not None]
+    total_attempts = sum(r[1] for r in results if r is not None)
+    avg_time = sum(durations) / len(durations) if durations else 0
+    concurrency = (sum(durations) / total_time) if total_time > 0 else 0
+    logger.info(
+        f"All TTS tasks completed in {total_time:.2f}s. Average chunk time: {avg_time:.2f}s. Achieved concurrency: {concurrency:.2f}x"
+    )
+    logger.info(f"Total retry attempts across all tasks: {total_attempts}")
+    return [r[0] if r else None for r in results]
 
 # --- Flask 路由和 API ---
 @app.route('/')
@@ -305,10 +327,7 @@ async def generate_speech():
             text_chunks = split_text_intelligently(text, cleaning_options)
             if not text_chunks: return jsonify({"error": {"message": "Input text is empty."}}), 400
 
-            logger.info(f"[Step 2/4] Starting TTS generation with concurrency limit: {MAX_CONCURRENT_REQUESTS}...")
-            semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
-            tasks = [text_to_speech_with_retry(semaphore, i, chunk, final_voice, temp_dir) for i, chunk in enumerate(text_chunks)]
-            temp_file_paths = await asyncio.gather(*tasks)
+            temp_file_paths = await run_tts(text_chunks, final_voice, temp_dir)
             generation_duration = time.time() - request_start_time
             logger.info(f"Concurrent generation finished in {generation_duration:.2f}s.")
             
