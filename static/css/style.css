@@ -12,6 +12,22 @@ body {
   min-height: 100vh;
   box-sizing: border-box;
 }
+.top-bar {
+  position: absolute;
+  top: 10px;
+  right: 20px;
+  display: flex;
+  gap: 10px;
+}
+.top-bar button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+}
+.top-bar button:hover {
+  text-decoration: underline;
+}
 .container {
   background-color: #fff;
   padding: 30px 40px;
@@ -416,4 +432,27 @@ hr {
   border: none;
   border-top: 1px solid #dee2e6;
   margin: 15px 0;
+}
+
+/* Dark theme overrides */
+body.dark-theme {
+  background-color: #121212;
+  color: #e1e1e1;
+}
+body.dark-theme .container {
+  background-color: #1e1e1e;
+  color: #e1e1e1;
+}
+body.dark-theme input,
+body.dark-theme textarea,
+body.dark-theme select {
+  background-color: #2c2c2c;
+  color: #e1e1e1;
+  border-color: #555;
+}
+body.dark-theme .site-footer {
+  border-top-color: #555;
+}
+body.dark-theme .api-sync-toggle {
+  background-color: #2c3a55;
 }

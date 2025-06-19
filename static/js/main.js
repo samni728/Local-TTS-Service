@@ -263,8 +263,11 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   };
 
-  const updateCharCount = () =>
-    (charCounter.textContent = `字数: ${textInput.value.length}`);
+  const updateCharCount = () => {
+    const lang = window.currentLang || 'zh';
+    const label = (window.translations && window.translations[lang]?.char_count) || '字数:';
+    charCounter.textContent = `${label} ${textInput.value.length}`;
+  };
 
   const generateRandomToken = () => {
     const array = new Uint8Array(16);

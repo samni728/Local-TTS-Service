@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>登录 - 本地 TTS 服务</title>
+    <title data-i18n="login_title">登录 - 本地 TTS 服务</title>
     <link
       rel="stylesheet"
       href="{{ url_for('static', filename='css/style.css') }}"
@@ -48,13 +48,17 @@
     </style>
   </head>
   <body>
+    <div class="top-bar">
+      <button id="theme-toggle" title="Toggle theme">🌙</button>
+      <button id="lang-toggle">EN</button>
+    </div>
     <div class="container login-container">
-      <h1>登录到 TTS 服务</h1>
-      <p>此服务已启用密码保护。</p>
+      <h1 data-i18n="login_header">登录到 TTS 服务</h1>
+      <p data-i18n="login_tip">此服务已启用密码保护。</p>
       <form method="post" id="login-form">
         <input type="hidden" name="next" id="next-url" />
         <div class="form-group">
-          <label for="password">密码:</label>
+          <label for="password" data-i18n="password_label">密码:</label>
           <input
             type="password"
             id="password"
@@ -67,7 +71,7 @@
         {% if error %}
         <div class="error" style="display: block">{{ error }}</div>
         {% endif %}
-        <button type="submit">登 录</button>
+        <button type="submit" data-i18n="login_button">登 录</button>
       </form>
     </div>
 
@@ -78,6 +82,8 @@
         </a>
       </p>
     </footer>
+
+    <script src="{{ url_for('static', filename='js/common.js') }}"></script>
 
     <script>
       // 这段脚本会在页面加载时，智能地设置重定向 URL
