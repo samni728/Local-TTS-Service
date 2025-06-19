@@ -12,7 +12,7 @@ import subprocess
 import tempfile
 
 import edge_tts
-from flask import Flask, request, jsonify, render_template, send_file, session, redirect, url_for
+from flask import Flask, request, jsonify, render_template, send_file, session, redirect, url_for, Response
 from flask_cors import CORS
 from dotenv import load_dotenv
 import emoji
@@ -350,6 +350,7 @@ async def generate_speech():
         try:
             data = request.get_json()
             text, voice_name = data.get("input"), data.get("voice")
+            stream_enabled = bool(data.get("stream", False))
             
             # 核心逻辑：决定使用哪套过滤规则
             if config.get('sync_api_filtering', False):
@@ -379,6 +380,19 @@ async def generate_speech():
 
             for idx, chunk in enumerate(text_chunks, 1):
                 logger.info(f"Chunk {idx} length: {len(chunk)}")
+
+            if stream_enabled:
+                logger.info("Streaming mode enabled. Sending chunks as they are generated...")
+
+                async def generate_streaming_chunks():
+                    for i, chunk in enumerate(text_chunks, 1):
+                        logger.info(f"[Streaming] Processing chunk {i}/{len(text_chunks)}")
+                        communicate = edge_tts.Communicate(chunk, final_voice)
+                        async for chunk_data in communicate.stream():
+                            if chunk_data["type"] == "audio":
+                                yield chunk_data["data"]
+
+                return Response(generate_streaming_chunks(), mimetype="audio/mpeg")
 
             temp_file_paths = await run_tts(text_chunks, final_voice, temp_dir)
             generation_duration = time.time() - request_start_time
