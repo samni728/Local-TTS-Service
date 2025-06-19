@@ -161,7 +161,16 @@ def pre_process_text(text, options):
         processed_text = '\n'.join(reunited_lines)
     else:
         processed_text = processed_text.replace('\n', ' ')
-    return re.sub(r' +', ' ', processed_text.replace('\t', ' ')).strip()
+    processed_text = processed_text.replace('\t', ' ')
+    # Remove spaces inserted between Chinese characters due to PDF line breaks
+    processed_text = re.sub(r'(?<=[\u4e00-\u9fff])\s+(?=[\u4e00-\u9fff])', '', processed_text)
+    # Remove spaces around common Chinese punctuation
+    processed_text = re.sub(r'\s+([，。、？！；：])', r'\1', processed_text)
+    processed_text = re.sub(r'([，。、？！；：])\s+', r'\1', processed_text)
+    processed_text = re.sub(r'([（《「『])\s+', r'\1', processed_text)
+    processed_text = re.sub(r'\s+([）》」』])', r'\1', processed_text)
+    processed_text = re.sub(r' +', ' ', processed_text)
+    return processed_text.strip()
 
 def split_text_intelligently(text, options, target_size=800, max_size=1500):
     processed_text = pre_process_text(text, options)
