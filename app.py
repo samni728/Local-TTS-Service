@@ -35,6 +35,24 @@ SUPPORTED_LOCALES = {}
 MAX_CONCURRENT_REQUESTS = 20
 CHUNK_SIZE = 300
 
+# Helper to convert async generator to sync iterator for Flask
+def stream_audio_chunks(generator):
+    loop = asyncio.get_event_loop()
+    async_gen = generator.__aiter__()
+    async def _get_next():
+        try:
+            return await async_gen.__anext__()
+        except StopAsyncIteration:
+            return None
+    def sync_wrapper():
+        while True:
+            chunk = loop.run_until_complete(_get_next())
+            if chunk is None:
+                break
+            yield chunk
+    return sync_wrapper()
+
+
 # --- 数据加载与管理 ---
 def load_config_from_file():
     try:
@@ -392,7 +410,10 @@ async def generate_speech():
                             if chunk_data["type"] == "audio":
                                 yield chunk_data["data"]
 
-                return Response(generate_streaming_chunks(), mimetype="audio/mpeg")
+                return Response(
+                stream_audio_chunks(generate_streaming_chunks()),
+                content_type="audio/mpeg"
+            )
 
             temp_file_paths = await run_tts(text_chunks, final_voice, temp_dir)
             generation_duration = time.time() - request_start_time
