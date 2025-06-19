@@ -198,6 +198,30 @@ def split_text_intelligently(text, options, target_size=800, max_size=1500):
     logger.info(f"Intelligently split text into {len(final_chunks)} high-quality chunks.")
     return final_chunks
 
+# 新的文本分块函数，优先按标点断句，并确保每块不超过 max_chunk_len
+def split_text_into_chunks(text, max_chunk_len=300):
+    sentences = re.split(r'(?<=[。！？!?.])(?!(\d)|$)', text)
+    sentences = [s.strip() for s in sentences if s.strip()]
+
+    chunks = []
+    current_chunk = ""
+
+    for sentence in sentences:
+        if len(current_chunk) + len(sentence) <= max_chunk_len:
+            current_chunk += sentence
+        else:
+            if current_chunk:
+                chunks.append(current_chunk)
+            if len(sentence) > max_chunk_len:
+                sub_chunks = [sentence[i:i+max_chunk_len] for i in range(0, len(sentence), max_chunk_len)]
+                chunks.extend(sub_chunks)
+                current_chunk = ""
+            else:
+                current_chunk = sentence
+    if current_chunk:
+        chunks.append(current_chunk)
+    return chunks
+
 async def text_to_speech_with_retry(semaphore, chunk_index, text_chunk, voice, temp_dir):
     task_start_time = time.time()
     max_retries = 10
@@ -332,9 +356,21 @@ async def generate_speech():
             if not text or not voice_name: return jsonify({"error": {"message": "Parameters 'input' and 'voice' are required"}}), 400
 
             final_voice = config['openai_voice_map'].get(voice_name, voice_name)
-            logger.info("[Step 1/4] Pre-processing and splitting text into chunks...")
-            text_chunks = split_text_intelligently(text, cleaning_options)
-            if not text_chunks: return jsonify({"error": {"message": "Input text is empty."}}), 400
+            logger.info("[Step 1/4] Pre-processing text...")
+            processed_text = pre_process_text(text, cleaning_options)
+
+            max_chunk_len = request.args.get('max_chunk_len', 300)
+            try:
+                max_chunk_len = int(max_chunk_len)
+            except ValueError:
+                max_chunk_len = 300
+
+            text_chunks = split_text_into_chunks(processed_text, max_chunk_len=max_chunk_len)
+            if not text_chunks:
+                return jsonify({"error": {"message": "Input text is empty."}}), 400
+
+            for idx, chunk in enumerate(text_chunks, 1):
+                logger.info(f"Chunk {idx} length: {len(chunk)}")
 
             temp_file_paths = await run_tts(text_chunks, final_voice, temp_dir)
             generation_duration = time.time() - request_start_time
