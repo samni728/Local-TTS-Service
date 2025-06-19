@@ -10,16 +10,13 @@
         darkMode: 'class'
       };
     </script>
-
-    <script>
-      tailwind.config = { darkMode: 'class' };
-    </script>
-    <script src="https://cdn.tailwindcss.com"></script>
   </head>
   <body class="min-h-screen flex flex-col items-center justify-center bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200">
     <div class="absolute top-2 right-4 flex gap-2">
-      <button id="theme-toggle" title="Toggle theme" class="px-3 py-1 rounded-xl shadow-md bg-green-500 text-white transition-all hover:bg-green-600">🌙</button>
-      <button id="lang-toggle" class="px-3 py-1 rounded-xl shadow-md bg-green-500 text-white transition-all hover:bg-green-600">EN</button>
+      <button onclick="document.documentElement.classList.toggle('dark')" class="p-2 rounded bg-gray-200 dark:bg-gray-700 text-sm text-gray-900 dark:text-white shadow transition-all">
+        🌗 切换模式
+      </button>
+      <button id="lang-toggle" class="bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-xl shadow transition">EN</button>
     </div>
     <div class="bg-white dark:bg-gray-800 shadow-md rounded-xl p-8 w-full max-w-md text-center">
       <h1 class="text-2xl font-bold mb-2" data-i18n="login_header">登录到 TTS 服务</h1>
@@ -32,7 +29,7 @@
             type="password"
             id="password"
             name="password"
-            class="w-full p-2 border rounded-xl dark:bg-gray-700 dark:border-gray-600"
+            class="w-full p-3 border border-gray-300 rounded-xl dark:bg-gray-800 dark:border-gray-600 text-gray-900 dark:text-white"
             required
             autofocus
           />
@@ -40,7 +37,7 @@
         {% if error %}
         <div class="bg-red-200 text-red-700 p-3 rounded-xl" style="display: block">{{ error }}</div>
         {% endif %}
-        <button type="submit" class="w-full mt-2 px-4 py-2 rounded-xl bg-green-500 text-white shadow-md hover:bg-green-600" data-i18n="login_button">登 录</button>
+        <button type="submit" class="w-full mt-2 bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-xl shadow transition" data-i18n="login_button">登 录</button>
       </form>
     </div>
 
