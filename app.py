@@ -190,30 +190,38 @@ def split_text_intelligently(text, options, target_size=800, max_size=1500):
     return final_chunks
 
 async def text_to_speech_with_retry(semaphore, chunk_index, text_chunk, voice, temp_dir):
-    async with semaphore:
-        task_start_time = time.time()
-        max_retries = 10
-        logger.info(f"  [Task {chunk_index+1}] Starting processing for chunk: '{text_chunk[:30]}...'")
-        for attempt in range(max_retries):
-            try:
+    task_start_time = time.time()
+    max_retries = 10
+    logger.info(f"  [Task {chunk_index+1}] Starting processing for chunk: '{text_chunk[:30]}...'")
+    for attempt in range(max_retries):
+        try:
+            async with semaphore:
                 communicate = edge_tts.Communicate(text_chunk, voice)
                 temp_file_path = os.path.join(temp_dir, f"segment_{chunk_index}.mp3")
                 with open(temp_file_path, "wb") as temp_file:
                     async for chunk in communicate.stream():
-                        if chunk["type"] == "audio": temp_file.write(chunk["data"])
-                if os.path.getsize(temp_file_path) > 0:
-                    elapsed_time = time.time() - task_start_time
-                    logger.info(f"  [Task {chunk_index+1}] Successfully generated in {elapsed_time:.2f}s.")
-                    return temp_file_path
-                else: raise edge_tts.NoAudioReceived("No audio was received (empty file).")
-            except Exception as e:
-                logger.warning(f"  [Task {chunk_index+1}] Attempt {attempt + 1}/{max_retries} failed. Error: {e}")
-                if attempt + 1 == max_retries:
-                    logger.error(f"  [Task {chunk_index+1}] Failed after {max_retries} attempts. Giving up.")
-                    return None
-                wait_time = min(2 ** attempt, 8)
-                logger.info(f"  [Task {chunk_index+1}] Retrying in {wait_time} second(s)...")
-                await asyncio.sleep(wait_time)
+                        if chunk["type"] == "audio":
+                            temp_file.write(chunk["data"])
+            if os.path.getsize(temp_file_path) > 0:
+                elapsed_time = time.time() - task_start_time
+                logger.info(
+                    f"  [Task {chunk_index+1}] Successfully generated in {elapsed_time:.2f}s."
+                )
+                return temp_file_path
+            else:
+                raise edge_tts.NoAudioReceived("No audio was received (empty file).")
+        except Exception as e:
+            logger.warning(
+                f"  [Task {chunk_index+1}] Attempt {attempt + 1}/{max_retries} failed. Error: {e}"
+            )
+            if attempt + 1 == max_retries:
+                logger.error(
+                    f"  [Task {chunk_index+1}] Failed after {max_retries} attempts. Giving up."
+                )
+                return None
+            wait_time = min(2 ** attempt, 8)
+            logger.info(f"  [Task {chunk_index+1}] Retrying in {wait_time} second(s)...")
+            await asyncio.sleep(wait_time)
 
 # --- Flask 路由和 API ---
 @app.route('/')
