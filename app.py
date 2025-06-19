@@ -42,15 +42,18 @@ _loop_thread = threading.Thread(target=STREAM_LOOP.run_forever, daemon=True)
 _loop_thread.start()
 
 async def generate_streaming_audio_async(text_chunks, voice):
-    chunk_counter = 0
-    for i, chunk in enumerate(text_chunks, 1):
-        logger.info(f"[Streaming] Processing chunk {i}/{len(text_chunks)}")
+    total_chunks = len(text_chunks)
+    for idx, chunk in enumerate(text_chunks, start=1):
+        logger.info(f"[Streaming] Processing chunk {idx}/{total_chunks}")
         communicate = edge_tts.Communicate(chunk, voice)
+        buffer = bytearray()
         async for chunk_data in communicate.stream():
             if chunk_data["type"] == "audio":
-                chunk_counter += 1
-                logger.info(f"Streaming chunk {chunk_counter} sent")
-                yield chunk_data["data"]
+                buffer.extend(chunk_data["data"])
+        if buffer:
+            assert 1 <= idx <= total_chunks
+            logger.info(f"Streaming chunk {idx}/{total_chunks} sent")
+            yield bytes(buffer)
 
 def generate_streaming_audio_sync(text_chunks, voice):
     async_iter = generate_streaming_audio_async(text_chunks, voice).__aiter__()
