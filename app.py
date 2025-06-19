@@ -68,7 +68,9 @@ def initialize_config():
         config = loaded_config
         if updated: save_config_to_file(config)
     MAX_CONCURRENT_REQUESTS = config.get("max_concurrent_requests", 20)
-    logger.info(f"Configuration loaded. Max concurrent requests set to: {MAX_CONCURRENT_REQUESTS}")
+    logger.info(
+        f"Configuration loaded. Port: {config.get('port')} - Max concurrent requests: {MAX_CONCURRENT_REQUESTS}"
+    )
 
 def parse_voices():
     global ALL_VOICES, SUPPORTED_LOCALES
@@ -246,7 +248,9 @@ def get_all_voices(): return jsonify(ALL_VOICES)
 
 @app.route('/v1/config', methods=['GET'])
 @login_required
-def get_config(): return jsonify(config)
+def get_config():
+    logger.info("Configuration requested via API.")
+    return jsonify(config)
 
 @app.route('/v1/config', methods=['POST'])
 @login_required
@@ -259,7 +263,9 @@ def update_config():
         config.update(new_data)
         MAX_CONCURRENT_REQUESTS = config.get("max_concurrent_requests", 20)
         save_config_to_file(config)
-        logger.info(f"Configuration updated. Max concurrent requests set to: {MAX_CONCURRENT_REQUESTS}")
+        logger.info(
+            f"Configuration updated. Port: {config.get('port')} - Max concurrent requests set to: {MAX_CONCURRENT_REQUESTS}"
+        )
         return jsonify({"message": "设置已保存。"})
     except Exception as e:
         logger.error(f"Error updating config: {e}", exc_info=True)
