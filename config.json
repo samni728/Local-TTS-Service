@@ -10,6 +10,7 @@
         "echo": "zh-HK-WanLungNeural"
     },
     "max_concurrent_requests": 10,
+    "chunk_size": 300,
     "sync_api_filtering": true,
     "default_cleaning_options": {
         "remove_markdown": true,

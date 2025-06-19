@@ -9,3 +9,4 @@ requests>=2.31.0
 # 高级文本清洗与 Emoji 处理库
 cleantext>=1.1.4
 emoji>=2.0.0
+sentence-splitter>=1.4

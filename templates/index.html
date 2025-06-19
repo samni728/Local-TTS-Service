@@ -13,9 +13,7 @@
   </head>
   <body class="min-h-screen flex flex-col items-center p-4 bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200">
     <div class="absolute top-2 right-4 flex gap-2">
-      <button onclick="document.documentElement.classList.toggle('dark')" class="p-2 rounded bg-gray-200 dark:bg-gray-700 text-sm text-gray-900 dark:text-white shadow transition-all">
-        🌗 切换模式
-      </button>
+      <button id="theme-toggle" class="p-2 rounded bg-gray-200 dark:bg-gray-700 text-sm text-gray-900 dark:text-white shadow transition-all">🌗 切换模式</button>
       <button id="lang-toggle" class="bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-xl shadow transition">EN</button>
     </div>
     <div class="container bg-white dark:bg-gray-800 shadow-md rounded-xl p-8 w-full max-w-3xl">
@@ -125,6 +123,10 @@
       <div>
         <label for="concurrency-input" class="font-semibold mb-1 block" data-i18n="concurrency">并发数:</label>
         <input type="number" id="concurrency-input" min="1" max="100" class="w-full p-3 border border-gray-300 rounded-xl dark:bg-gray-800 dark:border-gray-600 text-gray-900 dark:text-white" />
+      </div>
+      <div>
+        <label for="chunk-size-input" class="font-semibold mb-1 block" data-i18n="chunk_size">分块大小:</label>
+        <input type="number" id="chunk-size-input" min="50" max="2000" class="w-full p-3 border border-gray-300 rounded-xl dark:bg-gray-800 dark:border-gray-600 text-gray-900 dark:text-white" />
       </div>
     </div>
     <p class="text-sm text-gray-600 dark:text-gray-400" data-i18n="port_hint">端口修改需重启服务。并发数保存后立即对新请求生效。</p>

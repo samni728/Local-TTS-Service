@@ -33,6 +33,7 @@ config = {}
 ALL_VOICES = []
 SUPPORTED_LOCALES = {}
 MAX_CONCURRENT_REQUESTS = 20
+CHUNK_SIZE = 300
 
 # --- 数据加载与管理 ---
 def load_config_from_file():
@@ -44,9 +45,12 @@ def save_config_to_file(data):
     with open(CONFIG_FILE, 'w', encoding='utf-8') as f: json.dump(data, f, indent=4, ensure_ascii=False)
 
 def initialize_config():
-    global config, MAX_CONCURRENT_REQUESTS
+    global config, MAX_CONCURRENT_REQUESTS, CHUNK_SIZE
     default_config = {
-        "port": 5050, "api_token": "", "max_concurrent_requests": 20,
+        "port": 5050,
+        "api_token": "",
+        "max_concurrent_requests": 20,
+        "chunk_size": 300,
         "sync_api_filtering": True,
         "default_cleaning_options": {
             "remove_markdown": True, "remove_emoji": True,
@@ -68,8 +72,9 @@ def initialize_config():
         config = loaded_config
         if updated: save_config_to_file(config)
     MAX_CONCURRENT_REQUESTS = config.get("max_concurrent_requests", 20)
+    CHUNK_SIZE = config.get("chunk_size", 300)
     logger.info(
-        f"Configuration loaded. Port: {config.get('port')} - Max concurrent requests: {MAX_CONCURRENT_REQUESTS}"
+        f"Configuration loaded. Port: {config.get('port')} - Max concurrent requests: {MAX_CONCURRENT_REQUESTS} - Chunk size: {CHUNK_SIZE}"
     )
 
 def parse_voices():
@@ -318,16 +323,17 @@ def get_config():
 @app.route('/v1/config', methods=['POST'])
 @login_required
 def update_config():
-    global config, MAX_CONCURRENT_REQUESTS
+    global config, MAX_CONCURRENT_REQUESTS, CHUNK_SIZE
     try:
         new_data = request.get_json()
-        if not all(k in new_data for k in ['port', 'api_token', 'openai_voice_map', 'max_concurrent_requests', 'sync_api_filtering', 'default_cleaning_options']):
+        if not all(k in new_data for k in ['port', 'api_token', 'openai_voice_map', 'max_concurrent_requests', 'chunk_size', 'sync_api_filtering', 'default_cleaning_options']):
             return jsonify({"error": "Invalid data format"}), 400
         config.update(new_data)
         MAX_CONCURRENT_REQUESTS = config.get("max_concurrent_requests", 20)
+        CHUNK_SIZE = config.get("chunk_size", 300)
         save_config_to_file(config)
         logger.info(
-            f"Configuration updated. Port: {config.get('port')} - Max concurrent requests set to: {MAX_CONCURRENT_REQUESTS}"
+            f"Configuration updated. Port: {config.get('port')} - Max concurrent requests set to: {MAX_CONCURRENT_REQUESTS} - Chunk size set to: {CHUNK_SIZE}"
         )
         return jsonify({"message": "设置已保存。"})
     except Exception as e:
@@ -361,11 +367,11 @@ async def generate_speech():
             if processed_text is None:
                 logger.error("\u274c processed_text is None!\uFF01\u8BF7\u68C0\u67E5\u524D\u9762\u7684\u6E05\u6D17\u903B\u8F91")
 
-            max_chunk_len = request.args.get('max_chunk_len', 300)
+            max_chunk_len = request.args.get('max_chunk_len', CHUNK_SIZE)
             try:
                 max_chunk_len = int(max_chunk_len)
             except ValueError:
-                max_chunk_len = 300
+                max_chunk_len = CHUNK_SIZE
 
             text_chunks = split_text_into_chunks(processed_text, max_chunk_len=max_chunk_len)
             if not text_chunks:

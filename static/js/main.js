@@ -35,6 +35,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const charCounter = document.getElementById("char-counter");
   const autoPlayCheckbox = document.getElementById("auto-play");
   const concurrencyInput = document.getElementById("concurrency-input");
+  const chunkSizeInput = document.getElementById("chunk-size-input");
   const progressContainer = document.getElementById("progress-container");
   const progressBar = document.getElementById("progress-bar");
   const progressText = document.getElementById("progress-text");
@@ -117,6 +118,7 @@ document.addEventListener("DOMContentLoaded", () => {
     portInput.value = currentConfig.port;
     apiTokenInput.value = currentConfig.api_token || "";
     concurrencyInput.value = currentConfig.max_concurrent_requests;
+    chunkSizeInput.value = currentConfig.chunk_size;
     syncApiFilteringCheckbox.checked = currentConfig.sync_api_filtering;
 
     const opts = currentConfig.default_cleaning_options || {};
@@ -152,6 +154,7 @@ document.addEventListener("DOMContentLoaded", () => {
       port: parseInt(portInput.value, 10),
       api_token: apiTokenInput.value.trim(),
       max_concurrent_requests: parseInt(concurrencyInput.value, 10),
+      chunk_size: parseInt(chunkSizeInput.value, 10),
       sync_api_filtering: syncApiFilteringCheckbox.checked,
       default_cleaning_options: {},
       openai_voice_map: {},
