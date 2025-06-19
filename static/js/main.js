@@ -29,6 +29,7 @@ document.addEventListener("DOMContentLoaded", () => {
     "openai-mappings-container"
   );
   const settingsFeedback = document.getElementById("settings-feedback");
+  const saveSettingsButton = document.getElementById("save-settings-button");
   const charCounter = document.getElementById("char-counter");
   const autoPlayCheckbox = document.getElementById("auto-play");
   const concurrencyInput = document.getElementById("concurrency-input");
@@ -144,7 +145,7 @@ document.addEventListener("DOMContentLoaded", () => {
     updateApiExamples();
   };
 
-  const autoSaveConfig = () => {
+  const collectConfig = () => {
     const newConfig = {
       port: parseInt(portInput.value, 10),
       api_token: apiTokenInput.value.trim(),
@@ -165,6 +166,12 @@ document.addEventListener("DOMContentLoaded", () => {
       if (select) newConfig.openai_voice_map[alias] = select.value;
     });
 
+    return newConfig;
+  };
+
+  const saveConfig = () => {
+    const newConfig = collectConfig();
+
     fetch("/v1/config", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -175,11 +182,12 @@ document.addEventListener("DOMContentLoaded", () => {
         return response.json();
       })
       .then((result) => {
-        console.log("Config auto-saved:", result.message);
+        console.log("Config saved:", result.message);
         currentConfig = newConfig;
+        showMessage(settingsFeedback, "设置已保存");
       })
       .catch((error) =>
-        showMessage(settingsFeedback, "自动保存设置失败!", true)
+        showMessage(settingsFeedback, "保存设置失败!", true)
       );
   };
 
@@ -282,23 +290,11 @@ document.addEventListener("DOMContentLoaded", () => {
       speakButton.addEventListener("click", handleSpeakClick);
       generateTokenButton.addEventListener("click", () => {
         apiTokenInput.value = generateRandomToken();
-        autoSaveConfig();
         updateApiExamples();
       });
       apiTokenInput.addEventListener("input", updateApiExamples);
 
-      // 为所有配置项绑定自动保存事件
-      document
-        .querySelector(".details-content")
-        .addEventListener("change", (event) => {
-          if (
-            event.target.matches(
-              ".settings-input, #cleaning-options-panel input"
-            )
-          ) {
-            autoSaveConfig();
-          }
-        });
+      saveSettingsButton.addEventListener("click", saveConfig);
 
       const defaultLang = "zh-CN";
       languageSelect.value = defaultLang;
