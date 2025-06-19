@@ -10,6 +10,7 @@ from collections import defaultdict
 from functools import wraps
 import subprocess
 import tempfile
+import threading
 
 import edge_tts
 from flask import Flask, request, jsonify, render_template, send_file, session, redirect, url_for, Response
@@ -35,22 +36,35 @@ SUPPORTED_LOCALES = {}
 MAX_CONCURRENT_REQUESTS = 20
 CHUNK_SIZE = 300
 
-# Helper to convert async generator to sync iterator for Flask
-def stream_audio_chunks(generator):
-    loop = asyncio.get_event_loop()
-    async_gen = generator.__aiter__()
-    async def _get_next():
-        try:
-            return await async_gen.__anext__()
-        except StopAsyncIteration:
-            return None
-    def sync_wrapper():
+# Global event loop for streaming tasks
+STREAM_LOOP = asyncio.new_event_loop()
+_loop_thread = threading.Thread(target=STREAM_LOOP.run_forever, daemon=True)
+_loop_thread.start()
+
+async def generate_streaming_audio_async(text_chunks, voice):
+    chunk_counter = 0
+    for i, chunk in enumerate(text_chunks, 1):
+        logger.info(f"[Streaming] Processing chunk {i}/{len(text_chunks)}")
+        communicate = edge_tts.Communicate(chunk, voice)
+        async for chunk_data in communicate.stream():
+            if chunk_data["type"] == "audio":
+                chunk_counter += 1
+                logger.info(f"Streaming chunk {chunk_counter} sent")
+                yield chunk_data["data"]
+
+def generate_streaming_audio_sync(text_chunks, voice):
+    async_iter = generate_streaming_audio_async(text_chunks, voice).__aiter__()
+
+    def sync_gen():
         while True:
-            chunk = loop.run_until_complete(_get_next())
-            if chunk is None:
+            future = asyncio.run_coroutine_threadsafe(async_iter.__anext__(), STREAM_LOOP)
+            try:
+                chunk = future.result()
+            except StopAsyncIteration:
                 break
             yield chunk
-    return sync_wrapper()
+
+    return sync_gen()
 
 
 # --- 数据加载与管理 ---
@@ -402,18 +416,10 @@ async def generate_speech():
             if stream_enabled:
                 logger.info("Streaming mode enabled. Sending chunks as they are generated...")
 
-                async def generate_streaming_chunks():
-                    for i, chunk in enumerate(text_chunks, 1):
-                        logger.info(f"[Streaming] Processing chunk {i}/{len(text_chunks)}")
-                        communicate = edge_tts.Communicate(chunk, final_voice)
-                        async for chunk_data in communicate.stream():
-                            if chunk_data["type"] == "audio":
-                                yield chunk_data["data"]
-
                 return Response(
-                stream_audio_chunks(generate_streaming_chunks()),
-                content_type="audio/mpeg"
-            )
+                    generate_streaming_audio_sync(text_chunks, final_voice),
+                    content_type="audio/mpeg"
+                )
 
             temp_file_paths = await run_tts(text_chunks, final_voice, temp_dir)
             generation_duration = time.time() - request_start_time
