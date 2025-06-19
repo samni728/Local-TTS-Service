@@ -132,8 +132,8 @@ document.addEventListener("DOMContentLoaded", () => {
     OPENAI_VOICE_ALIASES.forEach((alias) => {
       const currentMapping = currentConfig.openai_voice_map[alias];
       const wrapper = document.createElement("div");
-      wrapper.className = "form-group-inline";
-      wrapper.innerHTML = `<label class="settings-label">${alias}</label><select id="mapping-${alias}" class="settings-input"></select>`;
+      wrapper.className = "flex items-center gap-2";
+      wrapper.innerHTML = `<span class="w-28 text-right font-semibold">${alias}</span><select id="mapping-${alias}" class="flex-1 p-2 border rounded-xl dark:bg-gray-700 dark:border-gray-600"></select>`;
       const select = wrapper.querySelector("select");
       allVoices.forEach((voice) => {
         const option = document.createElement("option");

@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', () => {
+function initCommon() {
   const translations = {
     zh: {
       title: '本地多语言 TTS 服务',
@@ -150,4 +150,10 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
-});
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initCommon);
+} else {
+  initCommon();
+}
