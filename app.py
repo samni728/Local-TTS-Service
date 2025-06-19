@@ -201,7 +201,7 @@ def split_text_intelligently(text, options, target_size=800, max_size=1500):
 # 新的文本分块函数，优先按标点断句，并确保每块不超过 max_chunk_len
 def split_text_into_chunks(text, max_chunk_len=300):
     sentences = re.split(r'(?<=[。！？!?.])(?!(\d)|$)', text)
-    sentences = [s.strip() for s in sentences if s.strip()]
+    sentences = [s.strip() for s in sentences if isinstance(s, str) and s.strip()]
 
     chunks = []
     current_chunk = ""
@@ -358,6 +358,8 @@ async def generate_speech():
             final_voice = config['openai_voice_map'].get(voice_name, voice_name)
             logger.info("[Step 1/4] Pre-processing text...")
             processed_text = pre_process_text(text, cleaning_options)
+            if processed_text is None:
+                logger.error("\u274c processed_text is None!\uFF01\u8BF7\u68C0\u67E5\u524D\u9762\u7684\u6E05\u6D17\u903B\u8F91")
 
             max_chunk_len = request.args.get('max_chunk_len', 300)
             try:
