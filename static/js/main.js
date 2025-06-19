@@ -172,7 +172,6 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   const saveConfig = (feedbackTarget) => {
-  const saveConfig = () => {
     const newConfig = collectConfig();
 
     fetch("/v1/config", {
@@ -187,16 +186,12 @@ document.addEventListener("DOMContentLoaded", () => {
       .then((result) => {
         console.log("Config saved:", result.message);
         currentConfig = newConfig;
-
         showMessage(feedbackTarget, "设置已保存");
       })
-      .catch((error) =>
-        showMessage(feedbackTarget, "保存设置失败!", true)
-        showMessage(settingsFeedback, "设置已保存");
-      })
-      .catch((error) =>
-        showMessage(settingsFeedback, "保存设置失败!", true)
-      );
+      .catch((error) => {
+        console.error("Error saving config:", error);
+        showMessage(feedbackTarget, "保存设置失败!", true);
+      });
   };
 
   const handleSpeakClick = async () => {
@@ -307,7 +302,6 @@ document.addEventListener("DOMContentLoaded", () => {
       saveFilteringButton.addEventListener("click", () =>
         saveConfig(filteringFeedback)
       );
-      saveSettingsButton.addEventListener("click", saveConfig);
 
       const defaultLang = "zh-CN";
       languageSelect.value = defaultLang;
