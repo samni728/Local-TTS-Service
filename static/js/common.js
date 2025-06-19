@@ -128,6 +128,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function applyTheme(theme) {
     document.body.classList.toggle('dark-theme', theme === 'dark');
+    document.documentElement.classList.toggle('dark', theme === 'dark');
   }
 
   function applyLang(lang) {
