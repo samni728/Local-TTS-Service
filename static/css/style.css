@@ -20,13 +20,18 @@ body {
   gap: 10px;
 }
 .top-bar button {
-  background: none;
-  border: none;
+  background: transparent;
+  border: 1px solid #10a37f;
+  color: #10a37f;
+  padding: 4px 8px;
+  border-radius: 4px;
   cursor: pointer;
   font-size: 14px;
+  transition: background-color 0.2s, color 0.2s;
 }
 .top-bar button:hover {
-  text-decoration: underline;
+  background-color: #10a37f;
+  color: #fff;
 }
 .container {
   background-color: #fff;
@@ -116,17 +121,17 @@ button {
   height: 50px;
   position: relative;
   color: #fff;
-  background-color: #007bff;
+  background-color: #10a37f;
   text-decoration: none;
 }
 button:hover:not(:disabled) {
-  background-color: #0069d9;
+  background-color: #0d8c6b;
 }
 button:active:not(:disabled) {
   transform: scale(0.98);
 }
 button:disabled {
-  background-color: #a0c7ff;
+  background-color: #7ecdb8;
   cursor: not-allowed;
 }
 .button-text {
@@ -180,7 +185,7 @@ button:disabled {
 .progress-bar {
   width: 0%;
   height: 100%;
-  background-color: #007bff;
+  background-color: #10a37f;
   transition: width 0.4s ease-in-out;
   border-radius: 6px;
 }
@@ -267,7 +272,7 @@ button:disabled {
   top: 50%;
   transform: translateY(-50%);
   font-size: 24px;
-  color: #007bff;
+  color: #10a37f;
   transition: transform 0.2s;
 }
 .collapsible-section[open] > summary::after {
@@ -349,7 +354,7 @@ button:disabled {
   align-items: center;
   width: 48px;
   height: 48px;
-  background-color: #6c757d;
+  background-color: #10a37f;
   color: #fff;
   border: none;
   border-radius: 8px;
@@ -358,7 +363,7 @@ button:disabled {
   flex-shrink: 0;
 }
 .icon-button:hover {
-  background-color: #5a6268;
+  background-color: #0d8c6b;
 }
 .icon-button svg {
   width: 22px;
@@ -394,7 +399,7 @@ button:disabled {
   border-top: 1px solid #dee2e6;
 }
 .site-footer a {
-  color: #007bff;
+  color: #10a37f;
   text-decoration: none;
   font-weight: 600;
 }
@@ -426,7 +431,7 @@ button:disabled {
 }
 .api-sync-toggle .checkbox-label {
   font-weight: bold;
-  color: #0056b3;
+  color: #10a37f;
 }
 hr {
   border: none;
@@ -455,4 +460,19 @@ body.dark-theme .site-footer {
 }
 body.dark-theme .api-sync-toggle {
   background-color: #2c3a55;
+}
+body.dark-theme .top-bar button {
+  border-color: #4dd6c0;
+  color: #4dd6c0;
+}
+body.dark-theme .top-bar button:hover {
+  background-color: #4dd6c0;
+  color: #202123;
+}
+body.dark-theme .icon-button {
+  background-color: #4dd6c0;
+  color: #202123;
+}
+body.dark-theme .icon-button:hover {
+  background-color: #3cbda5;
 }
