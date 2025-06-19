@@ -41,19 +41,98 @@ STREAM_LOOP = asyncio.new_event_loop()
 _loop_thread = threading.Thread(target=STREAM_LOOP.run_forever, daemon=True)
 _loop_thread.start()
 
+async def generate_silence_bytes(duration: float = 0.2) -> bytes:
+    cmd = [
+        "ffmpeg",
+        "-f",
+        "lavfi",
+        "-i",
+        "anullsrc=r=24000:cl=mono",
+        "-t",
+        str(duration),
+        "-q:a",
+        "9",
+        "-f",
+        "mp3",
+        "pipe:1",
+    ]
+    process = await asyncio.create_subprocess_exec(
+        *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+    )
+    stdout, stderr = await process.communicate()
+    if process.returncode != 0:
+        logger.error(
+            f"FFmpeg failed to generate silence.\n{stderr.decode(errors='ignore')}"
+        )
+        return b""
+    return stdout
+
+
 async def generate_streaming_audio_async(text_chunks, voice):
     total_chunks = len(text_chunks)
-    for idx, chunk in enumerate(text_chunks, start=1):
+    semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
+    buffers = [None] * (total_chunks + 1)
+    next_idx = 1
+
+    async def process_chunk(idx: int, text: str):
         logger.info(f"[Streaming] Processing chunk {idx}/{total_chunks}")
-        communicate = edge_tts.Communicate(chunk, voice)
-        buffer = bytearray()
-        async for chunk_data in communicate.stream():
-            if chunk_data["type"] == "audio":
-                buffer.extend(chunk_data["data"])
-        if buffer:
-            assert 1 <= idx <= total_chunks
-            logger.info(f"Streaming chunk {idx}/{total_chunks} sent")
-            yield bytes(buffer)
+        max_retries = 10
+        start_time = time.time()
+        for attempt in range(max_retries):
+            try:
+                logger.info(
+                    f"  [Task {idx}] Attempt {attempt + 1}/{max_retries} acquiring semaphore..."
+                )
+                async with semaphore:
+                    logger.info(
+                        f"  [Task {idx}] Acquired semaphore. Starting TTS request..."
+                    )
+                    communicate = edge_tts.Communicate(text, voice)
+                    buf = bytearray()
+                    async for chunk_data in communicate.stream():
+                        if chunk_data["type"] == "audio":
+                            buf.extend(chunk_data["data"])
+                if buf:
+                    elapsed_time = time.time() - start_time
+                    logger.info(
+                        f"  [Task {idx}] Successfully generated in {elapsed_time:.2f}s after {attempt + 1} attempt(s)."
+                    )
+                    logger.info(
+                        f"  [Task {idx}] Done. Total retry attempts: {attempt + 1}"
+                    )
+                    buffers[idx] = bytes(buf)
+                    break
+                else:
+                    raise edge_tts.NoAudioReceived("No audio was received (empty data).")
+            except Exception as e:
+                logger.warning(f"  [Task {idx}] Attempt {attempt + 1} failed: {e}")
+                if attempt + 1 == max_retries:
+                    elapsed_time = time.time() - start_time
+                    logger.error(
+                        f"  [Task {idx}] Failed after {max_retries} attempts. Giving up."
+                    )
+                    logger.info(
+                        f"  [Task {idx}] Done. Total retry attempts: {attempt + 1}"
+                    )
+                    buffers[idx] = await generate_silence_bytes()
+                    break
+                wait_time = min(2 ** attempt, 8)
+                logger.info(f"  [Task {idx}] Retrying after {wait_time:.2f}s...")
+                await asyncio.sleep(wait_time)
+
+    tasks = [asyncio.create_task(process_chunk(i, chunk)) for i, chunk in enumerate(text_chunks, start=1)]
+
+    try:
+        while next_idx <= total_chunks:
+            if buffers[next_idx] is not None:
+                data = buffers[next_idx]
+                logger.info(f"Streaming chunk {next_idx}/{total_chunks} sent")
+                yield data
+                next_idx += 1
+            else:
+                await asyncio.sleep(0.05)
+    finally:
+        await asyncio.gather(*tasks, return_exceptions=True)
 
 def generate_streaming_audio_sync(text_chunks, voice):
     async_iter = generate_streaming_audio_async(text_chunks, voice).__aiter__()
