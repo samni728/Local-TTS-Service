@@ -9,8 +9,8 @@
         "nova": "zh-TW-HsiaoChenNeural",
         "echo": "zh-HK-WanLungNeural"
     },
-    "max_concurrent_requests": 10,
-    "chunk_size": 300,
+    "max_concurrent_requests": 20,
+    "chunk_size": 400,
     "sync_api_filtering": true,
     "default_cleaning_options": {
         "remove_markdown": true,
