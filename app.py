@@ -555,6 +555,24 @@ def update_config():
         logger.error(f"Error updating config: {e}", exc_info=True)
         return jsonify({"error": "更新配置时发生内部错误。"}), 500
 
+@app.route('/v1/models', methods=['GET'])
+@token_required
+async def list_models():
+    client_ip = request.remote_addr or 'unknown'
+    logger.info(f"[INFO] - /v1/models requested by {client_ip}")
+
+    voice_map = config.get('openai_voice_map', {})
+    models = [
+        {
+            "id": f"tts-1-{name}",
+            "object": "model",
+            "owned_by": "local-tts",
+        }
+        for name in voice_map.keys()
+    ]
+    models.append({"id": "tts-1", "object": "model", "owned_by": "local-tts"})
+    return jsonify({"object": "list", "data": models})
+
 @app.route('/v1/audio/speech', methods=['POST'])
 @token_required
 async def generate_speech():
