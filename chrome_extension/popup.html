@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>LocalTTS</title>
+  <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAIAAABMXPacAAABLUlEQVR4nO3RQQ0AIBDAsAPbiAcZfbAqWLI1506crQN+1wCsAVgDsAZgDcAagDUAawDWAKwBWAOwBmANwBqANQBrANYArAFYA7AGYA3AGoA1AGsA1gCsAVgDsAZgDcAagDUAawDWAKwBWAOwBmANwBqANQBrANYArAFYA7AGYA3AGoA1AGsA1gCsAVgDsAZgDcAagDUAawDWAKwBWAOwBmANwBqANQBrANYArAFYA7AGYA3AGoA1AGsA1gCsAVgDsAZgDcAagDUAawDWAKwBWAOwBmANwBqANQBrANYArAFYA7AGYA3AGoA1AGsA1gCsAVgDsAZgDcAagD1P4AJ6ZhGSRAAAAABJRU5ErkJggg==">
+  <style>
+    body { font-family: sans-serif; width: 300px; }
+    button { margin: 4px; }
+    img.logo { width: 32px; height: 32px; }
+  </style>
+</head>
+<body>
+  <img class="logo" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAIAAABMXPacAAABLUlEQVR4nO3RQQ0AIBDAsAPbiAcZfbAqWLI1506crQN+1wCsAVgDsAZgDcAagDUAawDWAKwBWAOwBmANwBqANQBrANYArAFYA7AGYA3AGoA1AGsA1gCsAVgDsAZgDcAagDUAawDWAKwBWAOwBmANwBqANQBrANYArAFYA7AGYA3AGoA1AGsA1gCsAVgDsAZgDcAagDUAawDWAKwBWAOwBmANwBqANQBrANYArAFYA7AGYA3AGoA1AGsA1gCsAVgDsAZgDcAagDUAawDWAKwBWAOwBmANwBqANQBrANYArAFYA7AGYA3AGoA1AGsA1gCsAVgDsAZgDcAagD1P4AJ6ZhGSRAAAAABJRU5ErkJggg==" alt="icon">
+  <button id="read-selection">朗读选中文本</button>
+  <button id="read-page">朗读整页</button>
+  <div>
+    <label>语言: <select id="language-select"></select></label>
+    <label>音色: <select id="voice-select"></select></label>
+  </div>
+  <audio id="audio" controls style="width:100%;"></audio>
+  <script src="popup.js"></script>
+</body>
+</html>

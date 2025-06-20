@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>LocalTTS Options</title>
+  <style>
+    body { font-family: sans-serif; width: 300px; }
+    label { display:block; margin-top:8px; }
+  </style>
+</head>
+<body>
+  <h2>LocalTTS 设置</h2>
+  <label>API 地址: <input type="text" id="api-url" value="http://127.0.0.1:5050" /></label>
+  <label>API Token: <input type="text" id="api-token" /></label>
+  <label>语言: <select id="language-select"></select></label>
+  <label>音色: <select id="voice-select"></select></label>
+  <button id="refresh-btn">刷新语音列表</button>
+  <button id="save-btn">保存</button>
+  <script src="options.js"></script>
+</body>
+</html>
