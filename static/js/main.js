@@ -37,9 +37,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const streamPlayCheckbox = document.getElementById("stream-play");
   const concurrencyInput = document.getElementById("concurrency-input");
   const chunkSizeInput = document.getElementById("chunk-size-input");
-  const reqConcurrencyInput = document.getElementById("req-concurrency");
-  const reqChunkSizeInput = document.getElementById("req-chunk-size");
-  const reqSyncChunksInput = document.getElementById("req-sync-chunks");
+  const syncChunksInput = document.getElementById("sync-chunks-input");
   const progressContainer = document.getElementById("progress-container");
   const progressBar = document.getElementById("progress-bar");
   const progressText = document.getElementById("progress-text");
@@ -130,6 +128,7 @@ document.addEventListener("DOMContentLoaded", () => {
     apiTokenInput.value = currentConfig.api_token || "";
     concurrencyInput.value = currentConfig.max_concurrent_requests;
     chunkSizeInput.value = currentConfig.chunk_size;
+    syncChunksInput.value = currentConfig.sync_chunks;
     syncApiFilteringCheckbox.checked = currentConfig.sync_api_filtering;
 
     const opts = currentConfig.default_cleaning_options || {};
@@ -164,8 +163,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const newConfig = {
       port: parseInt(portInput.value, 10),
       api_token: apiTokenInput.value.trim(),
-      max_concurrent_requests: parseInt(concurrencyInput.value, 10),
       chunk_size: parseInt(chunkSizeInput.value, 10),
+      sync_chunks: parseInt(syncChunksInput.value, 10),
+      max_concurrent_requests: parseInt(concurrencyInput.value, 10),
       sync_api_filtering: syncApiFilteringCheckbox.checked,
       default_cleaning_options: {},
       openai_voice_map: {},
@@ -250,9 +250,6 @@ document.addEventListener("DOMContentLoaded", () => {
           voice: voice,
           cleaning_options: cleaningOptions,
           stream: streamPlayCheckbox.checked && mediaSourceSupported,
-          chunk_size: parseInt(reqChunkSizeInput.value, 10),
-          sync_chunks: parseInt(reqSyncChunksInput.value, 10),
-          max_concurrent_requests: parseInt(reqConcurrencyInput.value, 10),
         }),
       });
 

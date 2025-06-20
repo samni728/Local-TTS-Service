@@ -35,6 +35,7 @@ ALL_VOICES = []
 SUPPORTED_LOCALES = {}
 MAX_CONCURRENT_REQUESTS = 20
 CHUNK_SIZE = 300
+SYNC_CHUNKS = 1
 
 # Global event loop for streaming tasks
 STREAM_LOOP = asyncio.new_event_loop()
@@ -215,12 +216,13 @@ def save_config_to_file(data):
     with open(CONFIG_FILE, 'w', encoding='utf-8') as f: json.dump(data, f, indent=4, ensure_ascii=False)
 
 def initialize_config():
-    global config, MAX_CONCURRENT_REQUESTS, CHUNK_SIZE
+    global config, MAX_CONCURRENT_REQUESTS, CHUNK_SIZE, SYNC_CHUNKS
     default_config = {
         "port": 5050,
         "api_token": "",
         "max_concurrent_requests": 20,
         "chunk_size": 300,
+        "sync_chunks": 1,
         "sync_api_filtering": True,
         "default_cleaning_options": {
             "remove_markdown": True, "remove_emoji": True,
@@ -243,8 +245,9 @@ def initialize_config():
         if updated: save_config_to_file(config)
     MAX_CONCURRENT_REQUESTS = config.get("max_concurrent_requests", 20)
     CHUNK_SIZE = config.get("chunk_size", 300)
+    SYNC_CHUNKS = config.get("sync_chunks", 1)
     logger.info(
-        f"Configuration loaded. Port: {config.get('port')} - Max concurrent requests: {MAX_CONCURRENT_REQUESTS} - Chunk size: {CHUNK_SIZE}"
+        f"Configuration loaded. Port: {config.get('port')} - Max concurrent requests: {MAX_CONCURRENT_REQUESTS} - Chunk size: {CHUNK_SIZE} - Sync chunks: {SYNC_CHUNKS}"
     )
 
 def parse_voices():
@@ -496,16 +499,14 @@ def get_all_voices(): return jsonify(ALL_VOICES)
 @login_required
 def get_config():
     logger.info(
-        f"[CONFIG LOADED] Current settings: Port={config.get('port')}" \
-        f", ChunkSize={config.get('chunk_size')}" \
-        f", Concurrency={config.get('max_concurrent_requests')}"
+        f"[CONFIG LOADED] Current config: Port={config.get('port')}, ChunkSize={config.get('chunk_size')}, SyncChunks={config.get('sync_chunks')}, Concurrency={config.get('max_concurrent_requests')}"
     )
     return jsonify(config)
 
 @app.route('/v1/config', methods=['POST'])
 @login_required
 def update_config():
-    global config, MAX_CONCURRENT_REQUESTS, CHUNK_SIZE
+    global config, MAX_CONCURRENT_REQUESTS, CHUNK_SIZE, SYNC_CHUNKS
     try:
         new_data = request.get_json()
         required_keys = [
@@ -514,6 +515,7 @@ def update_config():
             'openai_voice_map',
             'max_concurrent_requests',
             'chunk_size',
+            'sync_chunks',
             'sync_api_filtering',
             'default_cleaning_options',
         ]
@@ -521,24 +523,33 @@ def update_config():
             return jsonify({"error": "Invalid data format"}), 400
 
         changed_msgs = []
-        for key in ['port', 'chunk_size', 'max_concurrent_requests', 'api_token']:
+        field_names = {
+            'port': 'Port',
+            'chunk_size': 'ChunkSize',
+            'sync_chunks': 'SyncChunks',
+            'max_concurrent_requests': 'Concurrency',
+            'api_token': 'ApiToken',
+        }
+        for key in ['port', 'chunk_size', 'sync_chunks', 'max_concurrent_requests', 'api_token']:
             old_val = config.get(key)
             new_val = new_data.get(key)
             if old_val != new_val:
+                field = field_names.get(key, key)
                 changed_msgs.append(
-                    f"{key.replace('_', ' ').title()}: {old_val} \u2192 {new_val}"
+                    f"{field} changed: {old_val} \u2192 {new_val}"
                 )
 
         config.update(new_data)
         MAX_CONCURRENT_REQUESTS = config.get("max_concurrent_requests", 20)
         CHUNK_SIZE = config.get("chunk_size", 300)
+        SYNC_CHUNKS = config.get("sync_chunks", 1)
         save_config_to_file(config)
 
         if changed_msgs:
             for msg in changed_msgs:
                 logger.info(f"[CONFIG UPDATED] {msg}")
-            if len(changed_msgs) > 1:
-                logger.info(f"[CONFIG UPDATED] {len(changed_msgs)} fields changed")
+        else:
+            logger.info("[CONFIG NO CHANGE]")
         return jsonify({"message": "设置已保存。"})
     except Exception as e:
         logger.error(f"Error updating config: {e}", exc_info=True)
@@ -584,11 +595,11 @@ async def generate_speech():
             except (TypeError, ValueError):
                 chunk_size_override = CHUNK_SIZE
 
-            sync_chunks = data.get("sync_chunks") or request.args.get("sync_chunks", 1)
+            sync_chunks = data.get("sync_chunks") or request.args.get("sync_chunks", SYNC_CHUNKS)
             try:
                 sync_chunks = int(sync_chunks)
             except (TypeError, ValueError):
-                sync_chunks = 1
+                sync_chunks = SYNC_CHUNKS
 
             max_concurrent_requests_override = (
                 data.get("max_concurrent_requests")
