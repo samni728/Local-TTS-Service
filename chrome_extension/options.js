@@ -21,6 +21,7 @@ function populateVoices(voices, locale, voiceSelect) {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+  applyOptionsI18n();
   const urlInput = document.getElementById('api-url');
   const tokenInput = document.getElementById('api-token');
   const languageSelect = document.getElementById('language-select');
@@ -65,7 +66,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       language: languageSelect.value,
       voice: voiceSelect.value
     });
-    alert('设置已保存');
+    const lang = getCurrentUILang();
+    alert(lang === 'zh' ? '设置已保存' : 'Saved');
   });
 
   loadConfig();
