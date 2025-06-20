@@ -69,14 +69,22 @@ async def generate_silence_bytes(duration: float = 0.2) -> bytes:
 
 
 async def generate_streaming_audio_async(text_chunks, voice):
+    """Generate audio chunks and yield them in a hybrid streaming mode.
+
+    The first few chunks are generated synchronously to provide an immediate
+    playback experience. Remaining chunks are processed concurrently while
+    ensuring chunks are yielded in order.
+    """
     total_chunks = len(text_chunks)
     semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
     buffers = [None] * (total_chunks + 1)
     results = [None] * (total_chunks + 1)
-    next_idx = 1
     start_time = time.time()
+    # Number of chunks handled sequentially before switching to concurrency
+    SYNC_CHUNKS = 3
 
     async def process_chunk(idx: int, text: str):
+        """Process a single text chunk with retry and concurrency control."""
         logger.info(f"[Streaming] Processing chunk {idx}/{total_chunks}")
         max_retries = 10
         chunk_start = time.time()
@@ -124,14 +132,25 @@ async def generate_streaming_audio_async(text_chunks, voice):
                 logger.info(f"  [Task {idx}] Retrying after {wait_time:.2f}s...")
                 await asyncio.sleep(wait_time)
 
-    tasks = [asyncio.create_task(process_chunk(i, chunk)) for i, chunk in enumerate(text_chunks, start=1)]
+    # --- Step 1: process the first few chunks synchronously ---
+    for idx, chunk in enumerate(text_chunks[:SYNC_CHUNKS], start=1):
+        await process_chunk(idx, chunk)
+        if buffers[idx] is not None:
+            logger.info(f"Streaming chunk {idx}/{total_chunks} sent")
+            yield buffers[idx]
 
+    # --- Step 2: launch concurrent tasks for the remaining chunks ---
+    tasks = [
+        asyncio.create_task(process_chunk(i, chunk))
+        for i, chunk in enumerate(text_chunks[SYNC_CHUNKS:], start=SYNC_CHUNKS + 1)
+    ]
+
+    next_idx = SYNC_CHUNKS + 1
     try:
         while next_idx <= total_chunks:
             if buffers[next_idx] is not None:
-                data = buffers[next_idx]
                 logger.info(f"Streaming chunk {next_idx}/{total_chunks} sent")
-                yield data
+                yield buffers[next_idx]
                 next_idx += 1
             else:
                 await asyncio.sleep(0.05)
