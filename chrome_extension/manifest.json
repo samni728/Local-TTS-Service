@@ -4,7 +4,7 @@
   "description": "Read text aloud using LocalTTS service.",
   "version": "0.1",
   "icons": {
-    "128": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAIAAABMXPacAAABLUlEQVR4nO3RQQ0AIBDAsAPbiAcZfbAqWLI1506crQN+1wCsAVgDsAZgDcAagDUAawDWAKwBWAOwBmANwBqANQBrANYArAFYA7AGYA3AGoA1AGsA1gCsAVgDsAZgDcAagDUAawDWAKwBWAOwBmANwBqANQBrANYArAFYA7AGYA3AGoA1AGsA1gCsAVgDsAZgDcAagDUAawDWAKwBWAOwBmANwBqANQBrANYArAFYA7AGYA3AGoA1AGsA1gCsAVgDsAZgDcAagDUAawDWAKwBWAOwBmANwBqANQBrANYArAFYA7AGYA3AGoA1AGsA1gCsAVgDsAZgDcAagD1P4AJ6ZhGSRAAAAABJRU5ErkJggg=="
+    "128": "icon128.png"
   },
   "permissions": ["storage", "activeTab", "scripting", "contextMenus"],
   "host_permissions": ["http://*/v1/audio/*", "https://*/v1/audio/*"],
@@ -12,7 +12,7 @@
     "service_worker": "background.js"
   },
   "action": {
-    "default_icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAIAAABMXPacAAABLUlEQVR4nO3RQQ0AIBDAsAPbiAcZfbAqWLI1506crQN+1wCsAVgDsAZgDcAagDUAawDWAKwBWAOwBmANwBqANQBrANYArAFYA7AGYA3AGoA1AGsA1gCsAVgDsAZgDcAagDUAawDWAKwBWAOwBmANwBqANQBrANYArAFYA7AGYA3AGoA1AGsA1gCsAVgDsAZgDcAagDUAawDWAKwBWAOwBmANwBqANQBrANYArAFYA7AGYA3AGoA1AGsA1gCsAVgDsAZgDcAagDUAawDWAKwBWAOwBmANwBqANQBrANYArAFYA7AGYA3AGoA1AGsA1gCsAVgDsAZgDcAagD1P4AJ6ZhGSRAAAAABJRU5ErkJggg==",
+    "default_icon": "icon128.png",
     "default_popup": "popup.html"
   },
   "options_page": "options.html"
