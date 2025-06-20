@@ -126,27 +126,19 @@
         <input type="number" id="port-input" class="w-full p-3 border border-gray-300 rounded-xl dark:bg-gray-800 dark:border-gray-600 text-gray-900 dark:text-white" />
       </div>
       <div>
-        <label for="concurrency-input" class="font-semibold mb-1 block" data-i18n="concurrency">并发数:</label>
-        <input type="number" id="concurrency-input" min="1" max="100" class="w-full p-3 border border-gray-300 rounded-xl dark:bg-gray-800 dark:border-gray-600 text-gray-900 dark:text-white" />
-      </div>
-      <div>
         <label for="chunk-size-input" class="font-semibold mb-1 block" data-i18n="chunk_size">分块大小:</label>
         <input type="number" id="chunk-size-input" min="50" max="2000" class="w-full p-3 border border-gray-300 rounded-xl dark:bg-gray-800 dark:border-gray-600 text-gray-900 dark:text-white" />
       </div>
       <div>
-        <label for="req-sync-chunks" class="font-semibold mb-1 block" data-i18n="sync_chunks">初始同步分块数:</label>
-        <input type="number" id="req-sync-chunks" value="1" min="0" class="w-full p-3 border border-gray-300 rounded-xl dark:bg-gray-800 dark:border-gray-600 text-gray-900 dark:text-white" />
+        <label for="sync-chunks-input" class="font-semibold mb-1 block" data-i18n="sync_chunks">初始同步分块数:</label>
+        <input type="number" id="sync-chunks-input" min="0" value="1" class="w-full p-3 border border-gray-300 rounded-xl dark:bg-gray-800 dark:border-gray-600 text-gray-900 dark:text-white" />
       </div>
       <div>
-        <label for="req-chunk-size" class="font-semibold mb-1 block" data-i18n="chunk_size">分块大小:</label>
-        <input type="number" id="req-chunk-size" value="300" min="50" max="2000" class="w-full p-3 border border-gray-300 rounded-xl dark:bg-gray-800 dark:border-gray-600 text-gray-900 dark:text-white" />
-      </div>
-      <div>
-        <label for="req-concurrency" class="font-semibold mb-1 block" data-i18n="concurrency">并发数:</label>
-        <input type="number" id="req-concurrency" value="10" min="1" max="100" class="w-full p-3 border border-gray-300 rounded-xl dark:bg-gray-800 dark:border-gray-600 text-gray-900 dark:text-white" />
+        <label for="concurrency-input" class="font-semibold mb-1 block" data-i18n="concurrency">并发数:</label>
+        <input type="number" id="concurrency-input" min="1" max="100" class="w-full p-3 border border-gray-300 rounded-xl dark:bg-gray-800 dark:border-gray-600 text-gray-900 dark:text-white" />
       </div>
     </div>
-    <p class="text-sm text-gray-600 dark:text-gray-400" data-i18n="port_hint">端口修改需重启服务。并发数保存后立即对新请求生效。</p>
+    <p class="text-sm text-gray-600 dark:text-gray-400" data-i18n="port_hint">端口修改需重启服务，其它设置保存后立即生效。</p>
     <div>
       <label for="api-token-input" class="font-semibold mb-1 block" data-i18n="api_token">API 密钥 (留空则不验证):</label>
       <div class="flex gap-2">
