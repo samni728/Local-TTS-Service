@@ -76,6 +76,8 @@ docker-compose up -d
 
 4.  **Access & configure**: - Visit `http://localhost:5050` (or your chosen port) in your browser. - After logging in, open **Service Settings**, set your **API key**, and save.
     ![LocalTTS api UI](./static/screen/s4.jpg)
+For streaming performance tips, see [Streaming Optimization](docs/STREAMING_OPTIMIZATION.md).
+
 
 ## 🤝 Contributing
 
