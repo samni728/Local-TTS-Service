@@ -82,6 +82,21 @@
         <label for="stream-play" data-i18n="stream_play">启用流式播放（无下载，低延迟）</label>
       </div>
 
+      <div class="grid grid-cols-3 gap-2 mb-4">
+        <div>
+          <label for="req-sync-chunks" class="font-semibold mb-1 block" data-i18n="sync_chunks">初始同步分块数:</label>
+          <input type="number" id="req-sync-chunks" value="1" min="0" class="w-full p-2 border rounded-xl dark:bg-gray-700 dark:border-gray-600" />
+        </div>
+        <div>
+          <label for="req-chunk-size" class="font-semibold mb-1 block" data-i18n="chunk_size">分块大小:</label>
+          <input type="number" id="req-chunk-size" value="300" min="50" max="2000" class="w-full p-2 border rounded-xl dark:bg-gray-700 dark:border-gray-600" />
+        </div>
+        <div>
+          <label for="req-concurrency" class="font-semibold mb-1 block" data-i18n="concurrency">并发数:</label>
+          <input type="number" id="req-concurrency" value="10" min="1" max="100" class="w-full p-2 border rounded-xl dark:bg-gray-700 dark:border-gray-600" />
+        </div>
+      </div>
+
       <button id="speak-button" class="w-full bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-xl shadow transition flex justify-center items-center mb-4">
         <span class="button-text" data-i18n="gen_speech">🎵 生成语音</span>
         <div class="ml-2 w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" style="display: none"></div>

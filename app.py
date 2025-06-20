@@ -68,7 +68,12 @@ async def generate_silence_bytes(duration: float = 0.2) -> bytes:
     return stdout
 
 
-async def generate_streaming_audio_async(text_chunks, voice):
+async def generate_streaming_audio_async(
+    text_chunks,
+    voice,
+    sync_chunks: int = 1,
+    max_concurrent_requests: int | None = None,
+):
     """Generate audio chunks and yield them in a hybrid streaming mode.
 
     The first few chunks are generated synchronously to provide an immediate
@@ -76,12 +81,14 @@ async def generate_streaming_audio_async(text_chunks, voice):
     ensuring chunks are yielded in order.
     """
     total_chunks = len(text_chunks)
-    semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
+    semaphore = asyncio.Semaphore(
+        max_concurrent_requests or MAX_CONCURRENT_REQUESTS
+    )
     buffers = [None] * (total_chunks + 1)
     results = [None] * (total_chunks + 1)
     start_time = time.time()
     # Number of chunks handled sequentially before switching to concurrency
-    SYNC_CHUNKS = 3
+    SYNC_CHUNKS = max(sync_chunks, 0)
 
     async def process_chunk(idx: int, text: str):
         """Process a single text chunk with retry and concurrency control."""
@@ -176,8 +183,15 @@ async def generate_streaming_audio_async(text_chunks, voice):
         logger.info(f"  - Total Processing Time: {total_time:.2f}s")
         logger.info("=" * 50)
 
-def generate_streaming_audio_sync(text_chunks, voice):
-    async_iter = generate_streaming_audio_async(text_chunks, voice).__aiter__()
+def generate_streaming_audio_sync(
+    text_chunks,
+    voice,
+    sync_chunks: int = 1,
+    max_concurrent_requests: int | None = None,
+):
+    async_iter = generate_streaming_audio_async(
+        text_chunks, voice, sync_chunks, max_concurrent_requests
+    ).__aiter__()
 
     def sync_gen():
         while True:
@@ -422,9 +436,17 @@ async def text_to_speech_with_retry(semaphore, chunk_index, text_chunk, voice, t
             logger.info(f"  [Task {chunk_index+1}] Retrying after {wait_time:.2f}s...")
             await asyncio.sleep(wait_time)
 
-async def run_tts(text_chunks, voice, temp_dir):
-    logger.info(f"[Step 2/4] Starting TTS generation with concurrency limit: {MAX_CONCURRENT_REQUESTS}...")
-    semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
+async def run_tts(
+    text_chunks,
+    voice,
+    temp_dir,
+    max_concurrent_requests: int | None = None,
+):
+    limit = max_concurrent_requests or MAX_CONCURRENT_REQUESTS
+    logger.info(
+        f"[Step 2/4] Starting TTS generation with concurrency limit: {limit}..."
+    )
+    semaphore = asyncio.Semaphore(limit)
     start_time = time.time()
     tasks = [text_to_speech_with_retry(semaphore, i, chunk, voice, temp_dir) for i, chunk in enumerate(text_chunks)]
     results = await asyncio.gather(*tasks)
@@ -524,11 +546,35 @@ async def generate_speech():
             if processed_text is None:
                 logger.error("\u274c processed_text is None!\uFF01\u8BF7\u68C0\u67E5\u524D\u9762\u7684\u6E05\u6D17\u903B\u8F91")
 
-            max_chunk_len = request.args.get('max_chunk_len', CHUNK_SIZE)
+            # Override settings per request if provided
+            chunk_size_override = (
+                data.get("chunk_size")
+                or request.args.get("chunk_size")
+                or request.args.get("max_chunk_len")
+                or CHUNK_SIZE
+            )
             try:
-                max_chunk_len = int(max_chunk_len)
-            except ValueError:
-                max_chunk_len = CHUNK_SIZE
+                chunk_size_override = int(chunk_size_override)
+            except (TypeError, ValueError):
+                chunk_size_override = CHUNK_SIZE
+
+            sync_chunks = data.get("sync_chunks") or request.args.get("sync_chunks", 1)
+            try:
+                sync_chunks = int(sync_chunks)
+            except (TypeError, ValueError):
+                sync_chunks = 1
+
+            max_concurrent_requests_override = (
+                data.get("max_concurrent_requests")
+                or request.args.get("max_concurrent_requests")
+                or MAX_CONCURRENT_REQUESTS
+            )
+            try:
+                max_concurrent_requests_override = int(max_concurrent_requests_override)
+            except (TypeError, ValueError):
+                max_concurrent_requests_override = MAX_CONCURRENT_REQUESTS
+
+            max_chunk_len = chunk_size_override
 
             text_chunks = split_text_into_chunks(processed_text, max_chunk_len=max_chunk_len)
             if not text_chunks:
@@ -541,11 +587,21 @@ async def generate_speech():
                 logger.info("Streaming mode enabled. Sending chunks as they are generated...")
 
                 return Response(
-                    generate_streaming_audio_sync(text_chunks, final_voice),
-                    content_type="audio/mpeg"
+                    generate_streaming_audio_sync(
+                        text_chunks,
+                        final_voice,
+                        sync_chunks,
+                        max_concurrent_requests_override,
+                    ),
+                    content_type="audio/mpeg",
                 )
 
-            temp_file_paths = await run_tts(text_chunks, final_voice, temp_dir)
+            temp_file_paths = await run_tts(
+                text_chunks,
+                final_voice,
+                temp_dir,
+                max_concurrent_requests_override,
+            )
             generation_duration = time.time() - request_start_time
             logger.info(f"Concurrent generation finished in {generation_duration:.2f}s.")
             
