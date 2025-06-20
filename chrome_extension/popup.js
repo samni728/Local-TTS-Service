@@ -5,9 +5,9 @@ const serverInput = document.getElementById('server-url');
 const apiKeyInput = document.getElementById('api-key');
 const langSelect = document.getElementById('language-select');
 const voiceSelect = document.getElementById('voice-select');
-const audio = document.getElementById('audio');
 
 async function init() {
+    applyPopupI18n();
     config = await chrome.storage.local.get({
         apiUrl: 'http://127.0.0.1:5050',
         apiToken: '',
@@ -75,34 +75,12 @@ async function capture(tabId, func) {
 
 async function speakText(text) {
     if (!text) return;
-    const url = serverInput.value.replace(/\/$/, '');
-    const headers = { 'Content-Type': 'application/json' };
-    if (apiKeyInput.value) headers['Authorization'] = 'Bearer ' + apiKeyInput.value;
-    const body = JSON.stringify({ model: 'tts-1', input: text, voice: voiceSelect.value, stream: true });
-    const response = await fetch(`${url}/v1/audio/speech`, { method: 'POST', headers, body });
-    const mediaSource = new MediaSource();
-    audio.src = URL.createObjectURL(mediaSource);
-    audio.play();
-    mediaSource.addEventListener('sourceopen', () => {
-        const sourceBuffer = mediaSource.addSourceBuffer('audio/mpeg');
-        const reader = response.body.getReader();
-        const pump = () => reader.read().then(({ done, value }) => {
-            if (done) {
-                if (sourceBuffer.updating) {
-                    sourceBuffer.addEventListener('updateend', () => mediaSource.endOfStream(), { once: true });
-                } else {
-                    mediaSource.endOfStream();
-                }
-                return;
-            }
-            sourceBuffer.appendBuffer(value);
-            if (sourceBuffer.updating) {
-                sourceBuffer.addEventListener('updateend', pump, { once: true });
-            } else {
-                pump();
-            }
-        });
-        pump();
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['player.js'] });
+    await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: (cfg, t) => window.playTTS(cfg, t),
+        args: [config, text]
     });
 }
 
