@@ -1,27 +1,44 @@
-(function(){
+/**
+ * Floating TTS player injected into the current page.
+ * It streams audio via Media Source Extensions and provides
+ * basic controls (play, pause, seek, volume, speed, close).
+ */
+(function () {
   if (window.TTSPlayerInitialized) return;
   window.TTSPlayerInitialized = true;
 
   const langUI = {
-    en: { close: 'Close', speed: 'Speed' },
-    zh: { close: '\u5173\u95ed', speed: '\u901f\u5ea6' }
+    en: {
+      close: 'Close',
+      speed: 'Speed',
+      langSwitch: '中文'
+    },
+    zh: {
+      close: '\u5173\u95ed',
+      speed: '\u901f\u5ea6',
+      langSwitch: 'English'
+    }
   };
 
-  const currentLang = navigator.language.startsWith('zh') ? 'zh' : 'en';
+  let currentLang = navigator.language.startsWith('zh') ? 'zh' : 'en';
 
   function createFloatingPlayer() {
     if (document.getElementById('tts-floating-player')) return;
     const wrapper = document.createElement('div');
     wrapper.id = 'tts-floating-player';
-    wrapper.style.cssText = 'position:fixed; bottom:20px; right:20px; z-index:999999; background:white; padding:10px; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,0.1); width:300px;';
+    wrapper.style.cssText =
+      'position:fixed;bottom:20px;right:20px;z-index:9999999;background:#fff;' +
+      'padding:8px;width:320px;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.15);font-family:sans-serif;';
     wrapper.innerHTML = `
-      <div id="tts-header" style="cursor:move;background:#eee;padding:2px 5px;text-align:right;">
-        <button id="tts-close">\u00d7</button>
+      <div id="tts-header" style="cursor:move;display:flex;justify-content:space-between;align-items:center;">
+        <button id="lang-switch" style="background:none;border:none;cursor:pointer;font-size:12px;">${langUI[currentLang].langSwitch}</button>
+        <button id="tts-close" style="background:none;border:none;font-size:18px;cursor:pointer;">\u00d7</button>
       </div>
-      <audio id="tts-audio" controls style="width:100%;"></audio>
-      <label style="font-size:12px;display:block;margin-top:4px;">${langUI[currentLang].speed}
-        <input id="tts-speed" type="range" min="0.5" max="2" step="0.25" value="1">
-      </label>`;
+      <audio id="tts-audio" controls style="width:100%;margin-top:4px;"></audio>
+      <div style="display:flex;align-items:center;margin-top:4px;font-size:12px;">
+        <span id="speed-label" style="margin-right:4px;">${langUI[currentLang].speed}</span>
+        <input id="tts-speed" type="range" min="0.5" max="2" step="0.1" value="1" style="flex:1;">
+      </div>`;
     document.body.appendChild(wrapper);
 
     const header = wrapper.querySelector('#tts-header');
@@ -29,6 +46,12 @@
     wrapper.querySelector('#tts-close').addEventListener('click', () => {
       wrapper.remove();
       window.TTSPlayerInitialized = false;
+    });
+
+    wrapper.querySelector('#lang-switch').addEventListener('click', () => {
+      currentLang = currentLang === 'en' ? 'zh' : 'en';
+      wrapper.querySelector('#lang-switch').textContent = langUI[currentLang].langSwitch;
+      wrapper.querySelector('#speed-label').textContent = langUI[currentLang].speed;
     });
 
     const speedInput = wrapper.querySelector('#tts-speed');
@@ -77,26 +100,22 @@
     audio.playbackRate = document.getElementById('tts-speed').value;
     audio.play();
 
-    mediaSource.addEventListener('sourceopen', () => {
+    mediaSource.addEventListener('sourceopen', async () => {
       const sourceBuffer = mediaSource.addSourceBuffer('audio/mpeg');
       const reader = response.body.getReader();
-      const pump = () => reader.read().then(({ done, value }) => {
-        if (done) {
-          if (sourceBuffer.updating) {
-            sourceBuffer.addEventListener('updateend', () => mediaSource.endOfStream(), { once: true });
-          } else {
-            mediaSource.endOfStream();
-          }
-          return;
-        }
-        sourceBuffer.appendBuffer(value);
-        if (sourceBuffer.updating) {
-          sourceBuffer.addEventListener('updateend', pump, { once: true });
-        } else {
-          pump();
-        }
-      });
-      pump();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        await new Promise((resolve) => {
+          sourceBuffer.addEventListener('updateend', resolve, { once: true });
+          sourceBuffer.appendBuffer(value);
+        });
+      }
+      if (sourceBuffer.updating) {
+        sourceBuffer.addEventListener('updateend', () => mediaSource.endOfStream(), { once: true });
+      } else {
+        mediaSource.endOfStream();
+      }
     });
   };
 })();
