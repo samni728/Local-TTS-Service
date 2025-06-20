@@ -37,6 +37,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const streamPlayCheckbox = document.getElementById("stream-play");
   const concurrencyInput = document.getElementById("concurrency-input");
   const chunkSizeInput = document.getElementById("chunk-size-input");
+  const reqConcurrencyInput = document.getElementById("req-concurrency");
+  const reqChunkSizeInput = document.getElementById("req-chunk-size");
+  const reqSyncChunksInput = document.getElementById("req-sync-chunks");
   const progressContainer = document.getElementById("progress-container");
   const progressBar = document.getElementById("progress-bar");
   const progressText = document.getElementById("progress-text");
@@ -45,6 +48,13 @@ document.addEventListener("DOMContentLoaded", () => {
   );
   const syncApiFilteringCheckbox =
     document.getElementById("sync-api-filtering");
+  const mediaSourceSupported =
+    typeof window.MediaSource !== "undefined" &&
+    !/iphone|ipad|ipod/i.test(navigator.userAgent.toLowerCase());
+  if (!mediaSourceSupported) {
+    streamPlayCheckbox.checked = false;
+    streamPlayCheckbox.disabled = true;
+  }
 
   // 3. 功能函数
   const showMessage = (element, message, isError = false) => {
@@ -213,7 +223,8 @@ document.addEventListener("DOMContentLoaded", () => {
     setLoading(true);
     errorMessage.style.display = "none";
     audioContainer.style.display = "none";
-    downloadLink.style.display = streamPlayCheckbox.checked ? "none" : "";
+    downloadLink.style.display =
+      streamPlayCheckbox.checked && mediaSourceSupported ? "none" : "";
 
     try {
       const headers = { "Content-Type": "application/json" };
@@ -238,7 +249,10 @@ document.addEventListener("DOMContentLoaded", () => {
           input: text,
           voice: voice,
           cleaning_options: cleaningOptions,
-          stream: streamPlayCheckbox.checked,
+          stream: streamPlayCheckbox.checked && mediaSourceSupported,
+          chunk_size: parseInt(reqChunkSizeInput.value, 10),
+          sync_chunks: parseInt(reqSyncChunksInput.value, 10),
+          max_concurrent_requests: parseInt(reqConcurrencyInput.value, 10),
         }),
       });
 
@@ -251,7 +265,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       if (response.ok) {
         audioContainer.style.display = "flex";
-        if (streamPlayCheckbox.checked) {
+        if (streamPlayCheckbox.checked && mediaSourceSupported) {
           const mediaSource = new MediaSource();
           if (lastGeneratedBlobUrl) URL.revokeObjectURL(lastGeneratedBlobUrl);
           lastGeneratedBlobUrl = URL.createObjectURL(mediaSource);
@@ -346,6 +360,10 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
       streamPlayCheckbox.addEventListener("change", () => {
+        if (streamPlayCheckbox.checked && !mediaSourceSupported) {
+          streamPlayCheckbox.checked = false;
+          return;
+        }
         if (streamPlayCheckbox.checked) {
           autoPlayCheckbox.checked = false;
           downloadLink.style.display = "none";
