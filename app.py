@@ -495,7 +495,11 @@ def get_all_voices(): return jsonify(ALL_VOICES)
 @app.route('/v1/config', methods=['GET'])
 @login_required
 def get_config():
-    logger.info("Configuration requested via API.")
+    logger.info(
+        f"[CONFIG LOADED] Current settings: Port={config.get('port')}" \
+        f", ChunkSize={config.get('chunk_size')}" \
+        f", Concurrency={config.get('max_concurrent_requests')}"
+    )
     return jsonify(config)
 
 @app.route('/v1/config', methods=['POST'])
@@ -504,15 +508,37 @@ def update_config():
     global config, MAX_CONCURRENT_REQUESTS, CHUNK_SIZE
     try:
         new_data = request.get_json()
-        if not all(k in new_data for k in ['port', 'api_token', 'openai_voice_map', 'max_concurrent_requests', 'chunk_size', 'sync_api_filtering', 'default_cleaning_options']):
+        required_keys = [
+            'port',
+            'api_token',
+            'openai_voice_map',
+            'max_concurrent_requests',
+            'chunk_size',
+            'sync_api_filtering',
+            'default_cleaning_options',
+        ]
+        if not all(k in new_data for k in required_keys):
             return jsonify({"error": "Invalid data format"}), 400
+
+        changed_msgs = []
+        for key in ['port', 'chunk_size', 'max_concurrent_requests', 'api_token']:
+            old_val = config.get(key)
+            new_val = new_data.get(key)
+            if old_val != new_val:
+                changed_msgs.append(
+                    f"{key.replace('_', ' ').title()}: {old_val} \u2192 {new_val}"
+                )
+
         config.update(new_data)
         MAX_CONCURRENT_REQUESTS = config.get("max_concurrent_requests", 20)
         CHUNK_SIZE = config.get("chunk_size", 300)
         save_config_to_file(config)
-        logger.info(
-            f"Configuration updated. Port: {config.get('port')} - Max concurrent requests set to: {MAX_CONCURRENT_REQUESTS} - Chunk size set to: {CHUNK_SIZE}"
-        )
+
+        if changed_msgs:
+            for msg in changed_msgs:
+                logger.info(f"[CONFIG UPDATED] {msg}")
+            if len(changed_msgs) > 1:
+                logger.info(f"[CONFIG UPDATED] {len(changed_msgs)} fields changed")
         return jsonify({"message": "设置已保存。"})
     except Exception as e:
         logger.error(f"Error updating config: {e}", exc_info=True)
