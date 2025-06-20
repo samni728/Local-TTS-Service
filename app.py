@@ -72,12 +72,14 @@ async def generate_streaming_audio_async(text_chunks, voice):
     total_chunks = len(text_chunks)
     semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
     buffers = [None] * (total_chunks + 1)
+    results = [None] * (total_chunks + 1)
     next_idx = 1
+    start_time = time.time()
 
     async def process_chunk(idx: int, text: str):
         logger.info(f"[Streaming] Processing chunk {idx}/{total_chunks}")
         max_retries = 10
-        start_time = time.time()
+        chunk_start = time.time()
         for attempt in range(max_retries):
             try:
                 logger.info(
@@ -93,7 +95,7 @@ async def generate_streaming_audio_async(text_chunks, voice):
                         if chunk_data["type"] == "audio":
                             buf.extend(chunk_data["data"])
                 if buf:
-                    elapsed_time = time.time() - start_time
+                    elapsed_time = time.time() - chunk_start
                     logger.info(
                         f"  [Task {idx}] Successfully generated in {elapsed_time:.2f}s after {attempt + 1} attempt(s)."
                     )
@@ -101,13 +103,14 @@ async def generate_streaming_audio_async(text_chunks, voice):
                         f"  [Task {idx}] Done. Total retry attempts: {attempt + 1}"
                     )
                     buffers[idx] = bytes(buf)
+                    results[idx] = (True, attempt + 1, elapsed_time)
                     break
                 else:
                     raise edge_tts.NoAudioReceived("No audio was received (empty data).")
             except Exception as e:
                 logger.warning(f"  [Task {idx}] Attempt {attempt + 1} failed: {e}")
                 if attempt + 1 == max_retries:
-                    elapsed_time = time.time() - start_time
+                    elapsed_time = time.time() - chunk_start
                     logger.error(
                         f"  [Task {idx}] Failed after {max_retries} attempts. Giving up."
                     )
@@ -115,6 +118,7 @@ async def generate_streaming_audio_async(text_chunks, voice):
                         f"  [Task {idx}] Done. Total retry attempts: {attempt + 1}"
                     )
                     buffers[idx] = await generate_silence_bytes()
+                    results[idx] = (False, attempt + 1, elapsed_time)
                     break
                 wait_time = min(2 ** attempt, 8)
                 logger.info(f"  [Task {idx}] Retrying after {wait_time:.2f}s...")
@@ -133,6 +137,25 @@ async def generate_streaming_audio_async(text_chunks, voice):
                 await asyncio.sleep(0.05)
     finally:
         await asyncio.gather(*tasks, return_exceptions=True)
+        total_time = time.time() - start_time
+        durations = [r[2] for r in results[1:] if r]
+        total_attempts = sum(r[1] for r in results[1:] if r)
+        avg_time = sum(durations) / len(durations) if durations else 0
+        concurrency = (sum(durations) / total_time) if total_time > 0 else 0
+        failed_indices = [idx for idx, r in enumerate(results[1:], start=1) if r and not r[0]]
+        logger.info(
+            f"All TTS tasks completed in {total_time:.2f}s. Average chunk time: {avg_time:.2f}s. Achieved concurrency: {concurrency:.2f}x"
+        )
+        logger.info(f"Total retry attempts across all tasks: {total_attempts}")
+        logger.info("=" * 50)
+        logger.info("TTS Request Summary:")
+        logger.info(f"  - Total Chunks: {total_chunks}")
+        logger.info(f"  - Successful Chunks: {total_chunks - len(failed_indices)}")
+        logger.info(f"  - Failed Chunks: {len(failed_indices)}")
+        if failed_indices:
+            logger.warning(f"  - Indices of Failed Chunks: {failed_indices}")
+        logger.info(f"  - Total Processing Time: {total_time:.2f}s")
+        logger.info("=" * 50)
 
 def generate_streaming_audio_sync(text_chunks, voice):
     async_iter = generate_streaming_audio_async(text_chunks, voice).__aiter__()
