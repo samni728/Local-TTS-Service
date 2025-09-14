@@ -19,5 +19,10 @@
         "no_urls": true,
         "no_line_breaks": true,
         "custom_keywords": ""
+    },
+    "custom_voices": {
+        "wuu-CN-XiaotongNeural": "wuu-CN-XiaotongNeural",
+        "wuu-CN-YunzheNeural": "wuu-CN-YunzheNeural",
+        "zh-CN-guangxi-YunqiNeural": "zh-CN-guangxi-YunqiNeural"
     }
 }

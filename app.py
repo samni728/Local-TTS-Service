@@ -5,6 +5,10 @@ import json
 import re
 import secrets
 import time
+import hashlib
+import hmac
+import base64
+import uuid
 from io import BytesIO
 from collections import defaultdict
 from functools import wraps
@@ -13,6 +17,8 @@ import tempfile
 import threading
 
 import edge_tts
+import aiohttp
+import urllib.parse
 from flask import Flask, request, jsonify, render_template, send_file, session, redirect, url_for, Response
 from flask_cors import CORS
 from dotenv import load_dotenv
@@ -22,6 +28,26 @@ import emoji
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] [%(levelname)s] - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 logger = logging.getLogger(__name__)
 load_dotenv()
+
+# Microsoft Edge TTS API 配置
+MICROSOFT_TTS_KEY = "oik6PdDdMnOXemTbwvMn9de/h9lFnfBaCWbGMMZqqoSaQaqUOqjVGm5NqsmjcBI1x+sS9ugjB55HEJWRiFXYFw=="
+MICROSOFT_TTS_REGIONS = [
+    "eastus", "eastus2", "southcentralus", "westus2", "westus3", "australiaeast", 
+    "southeastasia", "northeurope", "swedencentral", "uksouth", "westeurope", 
+    "centralus", "southafricanorth", "centralindia", "eastasia", "japaneast", 
+    "koreacentral", "canadacentral", "francecentral", "germanywestcentral", 
+    "italynorth", "norwayeast", "polandcentral", "switzerlandnorth", 
+    "uaenorth", "brazilsouth", "centralusstage", "eastusstage", "eastus2stage", 
+    "northcentralusstage", "southcentralusstage", "westusstage", "westus2stage", 
+    "asia", "asiapacific", "australia", "brazil", "canada", "europe", "france", 
+    "germany", "global", "india", "japan", "korea", "norway", "singapore", 
+    "southafrica", "sweden", "switzerland", "uae", "uk", "unitedstates", 
+    "unitedstateseuap", "eastasiastage", "southeastasiastage", "centraluseuap", 
+    "eastus2euap", "westcentralus", "southafricawest", "australiacentral", 
+    "australiacentral2", "australiasoutheast", "japanwest", "koreasouth", 
+    "southindia", "westindia", "canadaeast", "francesouth", "germanynorth", 
+    "norwaywest", "switzerlandwest", "ukwest", "uaecentral", "brazilsoutheast"
+]
 app = Flask(__name__)
 CORS(app)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', secrets.token_hex(24))
@@ -74,6 +100,11 @@ async def generate_streaming_audio_async(
     voice,
     sync_chunks: int = 1,
     max_concurrent_requests: int | None = None,
+    voice_style: str = "general",
+    voice_role: str = "",
+    style_degree: float = 1.0,
+    speed: float = 1.0,
+    pitch: float = 1.0,
 ):
     """Generate audio chunks and yield them in a hybrid streaming mode.
 
@@ -105,11 +136,33 @@ async def generate_streaming_audio_async(
                     logger.info(
                         f"  [Task {idx}] Acquired semaphore. Starting TTS request..."
                     )
-                    communicate = edge_tts.Communicate(text, voice)
+                    # 计算速度和音调的百分比值
+                    rate_percent = f"{int((speed - 1) * 100):+d}%"
+                    pitch_percent = f"{int((pitch - 1) * 100):+d}Hz"
+                    
                     buf = bytearray()
-                    async for chunk_data in communicate.stream():
-                        if chunk_data["type"] == "audio":
-                            buf.extend(chunk_data["data"])
+                    
+                    # 首先尝试使用 edge_tts 库
+                    try:
+                        # 使用edge_tts的原生参数，不构建SSML
+                        communicate = edge_tts.Communicate(text, voice, rate=rate_percent, pitch=pitch_percent)
+                        async for chunk_data in communicate.stream():
+                            if chunk_data["type"] == "audio":
+                                buf.extend(chunk_data["data"])
+                    except Exception as edge_error:
+                        logger.warning(f"  [Task {idx}] edge_tts 库失败: {edge_error}")
+                        logger.info(f"  [Task {idx}] 尝试使用 Microsoft API...")
+                        
+                        # 如果 edge_tts 失败，使用 Microsoft API 作为备选方案
+                        try:
+                            # 为Microsoft API生成SSML
+                            ssml_text = generate_ssml(text, voice, voice_style, voice_role, style_degree, speed, pitch)
+                            audio_data = await tts_with_microsoft_api(ssml_text, voice)
+                            buf.extend(audio_data)
+                            logger.info(f"  [Task {idx}] Microsoft API 成功生成音频")
+                        except Exception as ms_error:
+                            logger.error(f"  [Task {idx}] Microsoft API 也失败: {ms_error}")
+                            raise ms_error
                 if buf:
                     elapsed_time = time.time() - chunk_start
                     logger.info(
@@ -189,9 +242,14 @@ def generate_streaming_audio_sync(
     voice,
     sync_chunks: int = 1,
     max_concurrent_requests: int | None = None,
+    voice_style: str = "general",
+    voice_role: str = "",
+    style_degree: float = 1.0,
+    speed: float = 1.0,
+    pitch: float = 1.0,
 ):
     async_iter = generate_streaming_audio_async(
-        text_chunks, voice, sync_chunks, max_concurrent_requests
+        text_chunks, voice, sync_chunks, max_concurrent_requests, voice_style, voice_role, style_degree, speed, pitch
     ).__aiter__()
 
     def sync_gen():
@@ -228,7 +286,8 @@ def initialize_config():
             "remove_markdown": True, "remove_emoji": True,
             "no_urls": True, "no_line_breaks": False, "custom_keywords": ""
         },
-        "openai_voice_map": { "shimmer": "zh-CN-XiaoxiaoNeural", "alloy": "en-US-AriaNeural", "fable": "zh-CN-shaanxi-XiaoniNeural", "onyx": "en-US-ChristopherNeural", "nova": "en-US-AvaNeural", "echo": "zh-CN-YunyangNeural" }
+        "openai_voice_map": { "shimmer": "zh-CN-XiaoxiaoNeural", "alloy": "en-US-AriaNeural", "fable": "zh-CN-shaanxi-XiaoniNeural", "onyx": "en-US-ChristopherNeural", "nova": "en-US-AvaNeural", "echo": "zh-CN-YunyangNeural" },
+        "custom_voices": {}
     }
     loaded_config = load_config_from_file()
     if loaded_config is None:
@@ -377,7 +436,145 @@ def split_text_intelligently(text, options, target_size=800, max_size=1500):
     return final_chunks
 
 # 新的文本分块函数，优先按标点断句，并确保每块不超过 max_chunk_len
+def generate_ssml(text, voice, style="general", role="", style_degree=1.0, speed=1.0, pitch=1.0):
+    """生成包含自定义语音参数的 SSML 内容"""
+    # 转义特殊字符
+    escaped_text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    
+    # 计算速度和音调的百分比值
+    rate_percent = int((speed - 1) * 100)
+    pitch_percent = int((pitch - 1) * 100)
+    
+    # 基础 SSML 结构，包含语速和音调
+    ssml_content = f'<prosody rate="{rate_percent}%" pitch="{pitch_percent}%">{escaped_text}</prosody>'
+    
+    # 添加语音风格
+    if style and style != "general":
+        style_attributes = f' styledegree="{style_degree}"' if style_degree != 1.0 else ""
+        ssml_content = f'<mstts:express-as style="{style}"{style_attributes}>{ssml_content}</mstts:express-as>'
+    
+    # 添加角色扮演
+    if role:
+        ssml_content = f'<mstts:express-as role="{role}">{ssml_content}</mstts:express-as>'
+    
+    # 完整的 SSML 文档，包含 voice 标签
+    ssml = f'''<speak xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="http://www.w3.org/2001/mstts" version="1.0" xml:lang="zh-CN"><voice name="{voice}">{ssml_content}</voice></speak>'''
+    
+    return ssml
+
+# Microsoft Edge TTS API 辅助函数
+async def get_microsoft_endpoint():
+    """获取 Microsoft Edge TTS 端点信息"""
+    try:
+        # 首先调用 Microsoft Translator 端点获取真实的端点信息
+        endpoint_url = "https://dev.microsofttranslator.com/apps/endpoint?api-version=1.0"
+        client_id = str(uuid.uuid4()).replace('-', '')
+        user_id = "0f04d16a175c411e"  # 默认用户ID
+        
+        # 生成认证签名
+        signature = await generate_microsoft_token(endpoint_url)
+        
+        # 尝试不同的语言和区域变体
+        variants = [
+            {"lang": "zh-Hans", "region": "zh-Hans-CN", "ver": "4.0.530a 5fe1dc6c"},
+            {"lang": "en-US", "region": "en-US", "ver": "4.0.530a 5fe1dc6c"},
+            {"lang": "en-US", "region": "en-US", "ver": "4.0.531a 5fe1dc6c"},
+        ]
+        
+        last_error = None
+        for attempt in range(5):
+            try:
+                variant = variants[attempt % len(variants)]
+                headers = {
+                    "Accept-Language": variant["lang"],
+                    "X-ClientVersion": variant["ver"],
+                    "X-UserId": user_id,
+                    "X-HomeGeographicRegion": variant["region"],
+                    "X-ClientTraceId": client_id,
+                    "X-MT-Signature": signature,
+                    "User-Agent": "okhttp/4.5.0",
+                    "Content-Type": "application/json; charset=utf-8",
+                    "Content-Length": "0",
+                    "Accept-Encoding": "gzip",
+                }
+                
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(endpoint_url, headers=headers) as response:
+                        if not response.ok:
+                            raise Exception(f"HTTP {response.status}: {response.reason}")
+                        
+                        data = await response.json()
+                        return {"r": data["r"], "t": data["t"], "url": f"https://{data['r']}.tts.speech.microsoft.com/cognitiveservices/v1"}
+                        
+            except Exception as e:
+                last_error = e
+                logger.warning(f"端点获取尝试 {attempt + 1} 失败: {e}")
+                if attempt < 4:
+                    await asyncio.sleep(1)
+                continue
+        
+        raise Exception(f"获取端点失败，最后错误: {last_error}")
+        
+    except Exception as e:
+        logger.error(f"获取 Microsoft 端点失败: {e}")
+        raise
+
+async def generate_microsoft_token(url_str):
+    """生成 Microsoft Edge TTS 认证令牌"""
+    try:
+        # 使用 demo.js 中的认证逻辑
+        url = url_str.split("://")[1]
+        encoded_url = urllib.parse.quote(url, safe='')
+        
+        uuid_str = str(uuid.uuid4()).replace('-', '')
+        from datetime import datetime
+        formatted_date = datetime.utcnow().strftime('%a, %d %b %Y %H:%M:%S GMT')
+        
+        bytes_to_sign = f"MSTranslatorAndroidApp{encoded_url}{formatted_date}{uuid_str}".lower()
+        
+        key_bytes = base64.b64decode(MICROSOFT_TTS_KEY)
+        signature_bytes = hmac.new(key_bytes, bytes_to_sign.encode('utf-8'), hashlib.sha256).digest()
+        signature = base64.b64encode(signature_bytes).decode('utf-8')
+        
+        # 使用 demo.js 的格式：MSTranslatorAndroidApp::signature::date::uuid
+        return f"MSTranslatorAndroidApp::{signature}::{formatted_date}::{uuid_str}"
+    except Exception as e:
+        logger.error(f"生成 Microsoft 令牌失败: {e}")
+        raise
+
+async def tts_with_microsoft_api(ssml_text, voice, output_format="audio-24khz-48kbitrate-mono-mp3"):
+    """使用 Microsoft Edge TTS API 直接生成音频"""
+    try:
+        endpoint = await get_microsoft_endpoint()
+        
+        headers = {
+            "Authorization": endpoint["t"],
+            "Content-Type": "application/ssml+xml",
+            "User-Agent": "okhttp/4.5.0",
+            "X-Microsoft-OutputFormat": output_format,
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post(endpoint["url"], headers=headers, data=ssml_text) as response:
+                if not response.ok:
+                    error_text = await response.text()
+                    raise Exception(f"Microsoft TTS API error: {response.status} {error_text}")
+                
+                return await response.read()
+                
+    except Exception as e:
+        logger.error(f"Microsoft TTS API 调用失败: {e}")
+        raise
+
 def split_text_into_chunks(text, max_chunk_len=300):
+    """智能文本分块，针对长文本优化"""
+    text_length = len(text)
+    
+    # 对于长文本（>10000字符），适当增大块大小以减少块数量
+    if text_length > 10000:
+        max_chunk_len = min(500, max_chunk_len * 1.5)  # 最大不超过500字符
+        logger.info(f"长文本检测 ({text_length} 字符)，调整块大小为 {max_chunk_len}")
+    
     sentences = re.split(r'(?<=[。！？!?.])(?!(\d)|$)', text)
     sentences = [s.strip() for s in sentences if isinstance(s, str) and s.strip()]
 
@@ -391,16 +588,27 @@ def split_text_into_chunks(text, max_chunk_len=300):
             if current_chunk:
                 chunks.append(current_chunk)
             if len(sentence) > max_chunk_len:
-                sub_chunks = [sentence[i:i+max_chunk_len] for i in range(0, len(sentence), max_chunk_len)]
-                chunks.extend(sub_chunks)
-                current_chunk = ""
+                # 对于超长句子，按标点符号进一步分割
+                sub_sentences = re.split(r'(?<=[，,；;])', sentence)
+                temp_chunk = ""
+                for sub in sub_sentences:
+                    if len(temp_chunk) + len(sub) <= max_chunk_len:
+                        temp_chunk += sub
+                    else:
+                        if temp_chunk:
+                            chunks.append(temp_chunk)
+                        temp_chunk = sub
+                current_chunk = temp_chunk
             else:
                 current_chunk = sentence
+    
     if current_chunk:
         chunks.append(current_chunk)
+    
+    logger.info(f"文本分块完成：{text_length} 字符 -> {len(chunks)} 个块 (平均 {text_length//len(chunks) if chunks else 0} 字符/块)")
     return chunks
 
-async def text_to_speech_with_retry(semaphore, chunk_index, text_chunk, voice, temp_dir):
+async def text_to_speech_with_retry(semaphore, chunk_index, text_chunk, voice, temp_dir, voice_style="general", voice_role="", style_degree=1.0, speed=1.0, pitch=1.0):
     task_start_time = time.time()
     max_retries = 10
     logger.info(f"  [Task {chunk_index+1}] Starting processing for chunk: '{text_chunk[:30]}...'")
@@ -411,12 +619,36 @@ async def text_to_speech_with_retry(semaphore, chunk_index, text_chunk, voice, t
             )
             async with semaphore:
                 logger.info(f"  [Task {chunk_index+1}] Acquired semaphore. Starting TTS request...")
-                communicate = edge_tts.Communicate(text_chunk, voice)
+                
+                # 计算速度和音调的百分比值
+                rate_percent = f"{int((speed - 1) * 100):+d}%"
+                pitch_percent = f"{int((pitch - 1) * 100):+d}Hz"
+                
                 temp_file_path = os.path.join(temp_dir, f"segment_{chunk_index}.mp3")
-                with open(temp_file_path, "wb") as temp_file:
-                    async for chunk in communicate.stream():
-                        if chunk["type"] == "audio":
-                            temp_file.write(chunk["data"])
+                
+                # 首先尝试使用 edge_tts 库
+                try:
+                    # 使用edge_tts的原生参数，不构建SSML
+                    communicate = edge_tts.Communicate(text_chunk, voice, rate=rate_percent, pitch=pitch_percent)
+                    with open(temp_file_path, "wb") as temp_file:
+                        async for chunk in communicate.stream():
+                            if chunk["type"] == "audio":
+                                temp_file.write(chunk["data"])
+                except Exception as edge_error:
+                    logger.warning(f"  [Task {chunk_index+1}] edge_tts 库失败: {edge_error}")
+                    logger.info(f"  [Task {chunk_index+1}] 尝试使用 Microsoft API...")
+                    
+                    # 如果 edge_tts 失败，使用 Microsoft API 作为备选方案
+                    try:
+                        # 为Microsoft API生成SSML
+                        ssml_text = generate_ssml(text_chunk, voice, voice_style, voice_role, style_degree, speed, pitch)
+                        audio_data = await tts_with_microsoft_api(ssml_text, voice)
+                        with open(temp_file_path, "wb") as temp_file:
+                            temp_file.write(audio_data)
+                        logger.info(f"  [Task {chunk_index+1}] Microsoft API 成功生成音频")
+                    except Exception as ms_error:
+                        logger.error(f"  [Task {chunk_index+1}] Microsoft API 也失败: {ms_error}")
+                        raise ms_error
             if os.path.getsize(temp_file_path) > 0:
                 elapsed_time = time.time() - task_start_time
                 logger.info(
@@ -444,6 +676,11 @@ async def run_tts(
     voice,
     temp_dir,
     max_concurrent_requests: int | None = None,
+    voice_style: str = "general",
+    voice_role: str = "",
+    style_degree: float = 1.0,
+    speed: float = 1.0,
+    pitch: float = 1.0,
 ):
     limit = max_concurrent_requests or MAX_CONCURRENT_REQUESTS
     logger.info(
@@ -451,7 +688,7 @@ async def run_tts(
     )
     semaphore = asyncio.Semaphore(limit)
     start_time = time.time()
-    tasks = [text_to_speech_with_retry(semaphore, i, chunk, voice, temp_dir) for i, chunk in enumerate(text_chunks)]
+    tasks = [text_to_speech_with_retry(semaphore, i, chunk, voice, temp_dir, voice_style, voice_role, style_degree, speed, pitch) for i, chunk in enumerate(text_chunks)]
     results = await asyncio.gather(*tasks)
     total_time = time.time() - start_time
     durations = [r[2] for r in results if r is not None]
@@ -555,6 +792,55 @@ def update_config():
         logger.error(f"Error updating config: {e}", exc_info=True)
         return jsonify({"error": "更新配置时发生内部错误。"}), 500
 
+@app.route('/v1/custom-voices', methods=['GET'])
+@login_required
+def get_custom_voices():
+    """获取自定义音色列表"""
+    return jsonify(config.get('custom_voices', {}))
+
+@app.route('/v1/custom-voices', methods=['POST'])
+@login_required
+def add_custom_voice():
+    """添加自定义音色"""
+    try:
+        data = request.get_json()
+        voice_name = data.get('voice_name', '').strip()
+        display_name = data.get('display_name', '').strip()
+        
+        if not voice_name:
+            return jsonify({"error": "音色名称不能为空"}), 400
+            
+        if not display_name:
+            display_name = voice_name
+            
+        # 添加到自定义音色列表
+        custom_voices = config.get('custom_voices', {})
+        custom_voices[voice_name] = display_name
+        config['custom_voices'] = custom_voices
+        save_config_to_file(config)
+        
+        return jsonify({"message": "自定义音色添加成功", "voice_name": voice_name, "display_name": display_name})
+    except Exception as e:
+        logger.error(f"Error adding custom voice: {e}")
+        return jsonify({"error": "添加自定义音色失败"}), 500
+
+@app.route('/v1/custom-voices/<voice_name>', methods=['DELETE'])
+@login_required
+def delete_custom_voice(voice_name):
+    """删除自定义音色"""
+    try:
+        custom_voices = config.get('custom_voices', {})
+        if voice_name in custom_voices:
+            del custom_voices[voice_name]
+            config['custom_voices'] = custom_voices
+            save_config_to_file(config)
+            return jsonify({"message": "自定义音色删除成功"})
+        else:
+            return jsonify({"error": "自定义音色不存在"}), 404
+    except Exception as e:
+        logger.error(f"Error deleting custom voice: {e}")
+        return jsonify({"error": "删除自定义音色失败"}), 500
+
 @app.route('/v1/models', methods=['GET'])
 @token_required
 async def list_models():
@@ -584,6 +870,13 @@ async def generate_speech():
             data = request.get_json()
             text, voice_name = data.get("input"), data.get("voice")
             stream_enabled = bool(data.get("stream", False))
+            
+            # 获取自定义声音参数
+            voice_style = data.get("style", "general")
+            voice_role = data.get("role", "")
+            style_degree = float(data.get("styleDegree", 1.0))
+            speed = float(data.get("speed", 1.0))
+            pitch = float(data.get("pitch", 1.0))
             
             # 核心逻辑：决定使用哪套过滤规则
             if config.get('sync_api_filtering', False):
@@ -647,6 +940,11 @@ async def generate_speech():
                         final_voice,
                         sync_chunks,
                         max_concurrent_requests_override,
+                        voice_style,
+                        voice_role,
+                        style_degree,
+                        speed,
+                        pitch,
                     ),
                     content_type="audio/mpeg",
                 )
@@ -656,6 +954,11 @@ async def generate_speech():
                 final_voice,
                 temp_dir,
                 max_concurrent_requests_override,
+                voice_style,
+                voice_role,
+                style_degree,
+                speed,
+                pitch,
             )
             generation_duration = time.time() - request_start_time
             logger.info(f"Concurrent generation finished in {generation_duration:.2f}s.")

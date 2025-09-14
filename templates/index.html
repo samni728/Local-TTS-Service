@@ -7,21 +7,44 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
-        darkMode: 'class'
+        darkMode: "class",
       };
     </script>
   </head>
-  <body class="min-h-screen flex flex-col items-center p-4 bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200">
+  <body
+    class="min-h-screen flex flex-col items-center p-4 bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200"
+  >
     <div class="absolute top-2 right-4 flex gap-2">
-      <button id="theme-toggle" class="p-2 rounded bg-gray-200 dark:bg-gray-700 text-sm text-gray-900 dark:text-white shadow transition-all">🌗 切换模式</button>
-      <button id="lang-toggle" class="bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-xl shadow transition">EN</button>
+      <button
+        id="theme-toggle"
+        class="p-2 rounded bg-gray-200 dark:bg-gray-700 text-sm text-gray-900 dark:text-white shadow transition-all"
+      >
+        🌗 切换模式
+      </button>
+      <button
+        id="lang-toggle"
+        class="bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-xl shadow transition"
+      >
+        EN
+      </button>
     </div>
-    <div class="container bg-white dark:bg-gray-800 shadow-md rounded-xl p-8 w-full max-w-3xl">
-      <h1 class="text-3xl font-bold text-center mb-4" data-i18n="title">本地多语言 TTS 服务</h1>
-      <p class="text-center mb-6" data-i18n="desc">基于 Microsoft Edge TTS 引擎，支持多种语言和音色。</p>
+    <div
+      class="container bg-white dark:bg-gray-800 shadow-md rounded-xl p-8 w-full max-w-3xl"
+    >
+      <h1 class="text-3xl font-bold text-center mb-4" data-i18n="title">
+        本地多语言 TTS 服务
+      </h1>
+      <p class="text-center mb-6" data-i18n="desc">
+        基于 Microsoft Edge TTS 引擎，支持多种语言和音色。
+      </p>
 
       <div class="mb-4">
-        <label for="text-input" class="font-semibold mb-1 block" data-i18n="input_label">输入文本:</label>
+        <label
+          for="text-input"
+          class="font-semibold mb-1 block"
+          data-i18n="input_label"
+          >输入文本:</label
+        >
         <textarea
           id="text-input"
           rows="5"
@@ -29,75 +52,398 @@
           data-i18n-placeholder="input_placeholder"
           placeholder="在这里输入要转换为语音的文本..."
         ></textarea>
-        <div id="char-counter" class="text-sm text-gray-600 dark:text-gray-400 mt-1 text-right" data-i18n="char_count">字数: 0</div>
+        <div
+          id="char-counter"
+          class="text-sm text-gray-600 dark:text-gray-400 mt-1 text-right"
+          data-i18n="char_count"
+        >
+          字数: 0
+        </div>
       </div>
-<details class="mb-4">
-  <summary class="cursor-pointer font-semibold" data-i18n="filter_options">文本过滤选项</summary>
-  <div class="mt-2 space-y-3" id="cleaning-options-panel">
-    <label class="flex items-center gap-2 font-semibold">
-      <input type="checkbox" id="sync-api-filtering" name="sync_api_filtering" class="h-4 w-4" />
-      <span data-i18n="api_sync_note">对所有 API 调用应用以下过滤规则。</span>
-      <span data-i18n="api_sync_save">修改后需点击下方保存按钮才会生效</span>
-    </label>
-    <hr class="my-2" />
-    <div id="cleaning-options" class="grid grid-cols-2 gap-2">
-      <label class="flex items-center gap-2"><input type="checkbox" name="remove_markdown" class="h-4 w-4" /> <span data-i18n="remove_markdown">移除 Markdown 语法</span></label>
-      <label class="flex items-center gap-2"><input type="checkbox" name="remove_emoji" class="h-4 w-4" /> <span data-i18n="remove_emoji">移除表情符号</span></label>
-      <label class="flex items-center gap-2"><input type="checkbox" name="no_urls" class="h-4 w-4" /> <span data-i18n="remove_url">移除 URL 链接</span></label>
-      <label class="flex items-center gap-2"><input type="checkbox" name="no_line_breaks" class="h-4 w-4" /> <span data-i18n="merge_line">合并为单行文本</span></label>
-    </div>
-    <div class="mt-3">
-      <label for="custom-keywords" class="font-semibold" data-i18n="custom_keywords">自定义移除关键词 (用英文逗号,分隔):</label>
-      <input type="text" id="custom-keywords" class="w-full mt-1 p-3 border border-gray-300 rounded-xl dark:bg-gray-800 dark:border-gray-600 text-gray-900 dark:text-white" data-i18n-placeholder="custom_placeholder" placeholder="例如：附注,图表,免责声明" />
-    </div>
-    <button id="save-filtering-button" class="mt-2 bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-xl shadow transition" data-i18n="save_filter">保存过滤设置</button>
-    <div id="filtering-feedback" class="hidden text-center"></div>
-  </div>
-</details>
+      <details class="mb-4">
+        <summary
+          class="cursor-pointer font-semibold"
+          data-i18n="filter_options"
+        >
+          文本过滤选项
+        </summary>
+        <div class="mt-2 space-y-3" id="cleaning-options-panel">
+          <label class="flex items-center gap-2 font-semibold">
+            <input
+              type="checkbox"
+              id="sync-api-filtering"
+              name="sync_api_filtering"
+              class="h-4 w-4"
+            />
+            <span data-i18n="api_sync_note"
+              >对所有 API 调用应用以下过滤规则。</span
+            >
+            <span data-i18n="api_sync_save"
+              >修改后需点击下方保存按钮才会生效</span
+            >
+          </label>
+          <hr class="my-2" />
+          <div id="cleaning-options" class="grid grid-cols-2 gap-2">
+            <label class="flex items-center gap-2"
+              ><input type="checkbox" name="remove_markdown" class="h-4 w-4" />
+              <span data-i18n="remove_markdown">移除 Markdown 语法</span></label
+            >
+            <label class="flex items-center gap-2"
+              ><input type="checkbox" name="remove_emoji" class="h-4 w-4" />
+              <span data-i18n="remove_emoji">移除表情符号</span></label
+            >
+            <label class="flex items-center gap-2"
+              ><input type="checkbox" name="no_urls" class="h-4 w-4" />
+              <span data-i18n="remove_url">移除 URL 链接</span></label
+            >
+            <label class="flex items-center gap-2"
+              ><input type="checkbox" name="no_line_breaks" class="h-4 w-4" />
+              <span data-i18n="merge_line">合并为单行文本</span></label
+            >
+          </div>
+          <div class="mt-3">
+            <label
+              for="custom-keywords"
+              class="font-semibold"
+              data-i18n="custom_keywords"
+              >自定义移除关键词 (用英文逗号,分隔):</label
+            >
+            <input
+              type="text"
+              id="custom-keywords"
+              class="w-full mt-1 p-3 border border-gray-300 rounded-xl dark:bg-gray-800 dark:border-gray-600 text-gray-900 dark:text-white"
+              data-i18n-placeholder="custom_placeholder"
+              placeholder="例如：附注,图表,免责声明"
+            />
+          </div>
+          <button
+            id="save-filtering-button"
+            class="mt-2 bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-xl shadow transition"
+            data-i18n="save_filter"
+          >
+            保存过滤设置
+          </button>
+          <div id="filtering-feedback" class="hidden text-center"></div>
+        </div>
+      </details>
 
       <div class="flex gap-4 mb-4">
         <div class="flex-1">
-          <label for="language-select" class="font-semibold mb-1 block" data-i18n="select_lang">选择语言:</label>
-          <select id="language-select" class="w-full p-2 border rounded-xl dark:bg-gray-700 dark:border-gray-600">
-            <option value="" data-i18n="select_lang_option">-- 选择语言 --</option>
+          <label
+            for="language-select"
+            class="font-semibold mb-1 block"
+            data-i18n="select_lang"
+            >选择语言:</label
+          >
+          <select
+            id="language-select"
+            class="w-full p-2 border rounded-xl dark:bg-gray-700 dark:border-gray-600"
+          >
+            <option value="" data-i18n="select_lang_option">
+              -- 选择语言 --
+            </option>
             {% for code, name in locales.items() %}
             <option value="{{ code }}">{{ name }}</option>
             {% endfor %}
+            <option value="custom">🎛️ 自定义音色配置</option>
           </select>
         </div>
         <div class="flex-1">
-          <label for="voice-select" class="font-semibold mb-1 block" data-i18n="select_voice">选择声音:</label>
-          <select id="voice-select" disabled class="w-full p-2 border rounded-xl dark:bg-gray-700 dark:border-gray-600">
+          <label
+            for="voice-select"
+            class="font-semibold mb-1 block"
+            data-i18n="select_voice"
+            >选择声音:</label
+          >
+          <select
+            id="voice-select"
+            disabled
+            class="w-full p-2 border rounded-xl dark:bg-gray-700 dark:border-gray-600"
+          >
             <option data-i18n="choose_lang_first">请先选择语言</option>
           </select>
         </div>
       </div>
 
+      <!-- 自定义声音配置面板 -->
+      <div
+        id="custom-voice-config"
+        class="hidden mb-4 p-4 bg-gray-50 dark:bg-gray-700 rounded-xl"
+      >
+        <h3 class="font-semibold mb-3" data-i18n="custom_voice_title">
+          自定义音色配置
+        </h3>
+
+        <div class="mb-4">
+          <label
+            for="custom-voice-name"
+            class="font-semibold mb-1 block"
+            data-i18n="custom_voice_name"
+            >自定义音色:</label
+          >
+          <div class="flex gap-2">
+            <input
+              type="text"
+              id="custom-voice-name"
+              class="flex-1 p-3 border border-gray-300 rounded-xl dark:bg-gray-800 dark:border-gray-600 text-gray-900 dark:text-white"
+              placeholder="例如: zh-CN-XiaoxiaoNeural"
+            />
+            <button
+              id="add-custom-voice-btn"
+              class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-xl shadow transition"
+              title="添加自定义音色"
+            >
+              ➕ 添加
+            </button>
+            <button
+              id="delete-custom-voice-btn"
+              class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-xl shadow transition"
+              title="删除自定义音色"
+              disabled
+            >
+              🗑️ 删除
+            </button>
+          </div>
+          <small
+            class="text-gray-600 dark:text-gray-400 text-sm mt-1 block"
+            data-i18n="custom_voice_hint"
+            >完整的音色标识符，如 zh-CN-XiaoxiaoNeural</small
+          >
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div>
+            <label
+              for="voice-style"
+              class="font-semibold mb-1 block"
+              data-i18n="voice_style"
+              >语音风格 (可选):</label
+            >
+            <select
+              id="voice-style"
+              class="w-full p-2 border border-gray-300 rounded-xl dark:bg-gray-700 dark:border-gray-600"
+            >
+              <option value="" data-i18n="default_style">默认风格</option>
+              <option value="angry" data-i18n="style_angry">
+                愤怒 (angry)
+              </option>
+              <option value="cheerful" data-i18n="style_cheerful">
+                开朗 (cheerful)
+              </option>
+              <option value="excited" data-i18n="style_excited">
+                兴奋 (excited)
+              </option>
+              <option value="friendly" data-i18n="style_friendly">
+                友好 (friendly)
+              </option>
+              <option value="hopeful" data-i18n="style_hopeful">
+                希望 (hopeful)
+              </option>
+              <option value="sad" data-i18n="style_sad">悲伤 (sad)</option>
+              <option value="shouting" data-i18n="style_shouting">
+                呐喊 (shouting)
+              </option>
+              <option value="terrified" data-i18n="style_terrified">
+                恐惧 (terrified)
+              </option>
+              <option value="unfriendly" data-i18n="style_unfriendly">
+                不友好 (unfriendly)
+              </option>
+              <option value="whispering" data-i18n="style_whispering">
+                耳语 (whispering)
+              </option>
+              <option value="gentle" data-i18n="style_gentle">
+                温柔 (gentle)
+              </option>
+              <option value="lyrical" data-i18n="style_lyrical">
+                抒情 (lyrical)
+              </option>
+              <option value="newscast" data-i18n="style_newscast">
+                新闻播报 (newscast)
+              </option>
+              <option value="poetry-reading" data-i18n="style_poetry">
+                诗歌朗诵 (poetry-reading)
+              </option>
+            </select>
+          </div>
+
+          <div>
+            <label
+              for="voice-role"
+              class="font-semibold mb-1 block"
+              data-i18n="voice_role"
+              >角色扮演 (可选):</label
+            >
+            <select
+              id="voice-role"
+              class="w-full p-2 border border-gray-300 rounded-xl dark:bg-gray-700 dark:border-gray-600"
+            >
+              <option value="" data-i18n="default_role">默认角色</option>
+              <option value="Girl" data-i18n="role_girl">女孩</option>
+              <option value="Boy" data-i18n="role_boy">男孩</option>
+              <option value="YoungAdultFemale" data-i18n="role_young_female">
+                年轻女性
+              </option>
+              <option value="YoungAdultMale" data-i18n="role_young_male">
+                年轻男性
+              </option>
+              <option value="OlderAdultFemale" data-i18n="role_adult_female">
+                成年女性
+              </option>
+              <option value="OlderAdultMale" data-i18n="role_adult_male">
+                成年男性
+              </option>
+              <option value="SeniorFemale" data-i18n="role_senior_female">
+                老年女性
+              </option>
+              <option value="SeniorMale" data-i18n="role_senior_male">
+                老年男性
+              </option>
+            </select>
+          </div>
+        </div>
+
+        <div class="mb-4">
+          <label
+            for="style-degree"
+            class="font-semibold mb-1 block"
+            data-i18n="style_degree"
+            >风格强度 (可选):</label
+          >
+          <div class="flex items-center gap-3">
+            <input
+              type="range"
+              id="style-degree"
+              min="0.01"
+              max="2"
+              step="0.01"
+              value="1"
+              class="flex-1"
+            />
+            <span
+              id="style-degree-value"
+              class="text-sm font-mono w-12 text-center"
+              >1.00</span
+            >
+          </div>
+          <small
+            class="text-gray-600 dark:text-gray-400 text-sm mt-1 block"
+            data-i18n="style_degree_hint"
+            >控制语音风格的强度，范围 0.01-2.00</small
+          >
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div>
+            <label
+              for="speed"
+              class="font-semibold mb-1 block"
+              data-i18n="speed"
+              >语速:</label
+            >
+            <div class="flex items-center gap-3">
+              <input
+                type="range"
+                id="speed"
+                min="0.25"
+                max="2.0"
+                step="0.05"
+                value="1.0"
+                class="flex-1"
+              />
+              <span id="speed-value" class="text-sm font-mono w-12 text-center"
+                >1.00</span
+              >
+            </div>
+            <small
+              class="text-gray-600 dark:text-gray-400 text-sm mt-1 block"
+              data-i18n="speed_hint"
+              >控制语音播放速度，范围 0.25-2.00</small
+            >
+          </div>
+
+          <div>
+            <label
+              for="pitch"
+              class="font-semibold mb-1 block"
+              data-i18n="pitch"
+              >音调:</label
+            >
+            <div class="flex items-center gap-3">
+              <input
+                type="range"
+                id="pitch"
+                min="0.5"
+                max="1.5"
+                step="0.05"
+                value="1.0"
+                class="flex-1"
+              />
+              <span id="pitch-value" class="text-sm font-mono w-12 text-center"
+                >1.00</span
+              >
+            </div>
+            <small
+              class="text-gray-600 dark:text-gray-400 text-sm mt-1 block"
+              data-i18n="pitch_hint"
+              >控制语音音调高低，范围 0.50-1.50</small
+            >
+          </div>
+        </div>
+      </div>
+
       <div class="mb-4 flex items-center gap-2">
         <input type="checkbox" id="auto-play" checked class="h-4 w-4" />
-        <label for="auto-play" data-i18n="auto_play">生成后自动播放（支持下载）</label>
+        <label for="auto-play" data-i18n="auto_play"
+          >生成后自动播放（支持下载）</label
+        >
       </div>
       <div class="mb-4 flex items-center gap-2">
         <input type="checkbox" id="stream-play" class="h-4 w-4" />
-        <label for="stream-play" data-i18n="stream_play">启用流式播放（无下载，低延迟）</label>
+        <label for="stream-play" data-i18n="stream_play"
+          >启用流式播放（无下载，低延迟）</label
+        >
       </div>
 
-
-      <button id="speak-button" class="w-full bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-xl shadow transition flex justify-center items-center mb-4">
+      <button
+        id="speak-button"
+        class="w-full bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-xl shadow transition flex justify-center items-center mb-4"
+      >
         <span class="button-text" data-i18n="gen_speech">🎵 生成语音</span>
-        <div class="ml-2 w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" style="display: none"></div>
+        <div
+          class="ml-2 w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"
+          style="display: none"
+        ></div>
       </button>
 
-      <div id="progress-container" class="w-full flex items-center gap-3 mt-2" style="display: none">
+      <div
+        id="progress-container"
+        class="w-full flex items-center gap-3 mt-2"
+        style="display: none"
+      >
         <div class="flex-grow h-2 bg-gray-200 dark:bg-gray-700 rounded">
-          <div id="progress-bar" class="h-full bg-green-500 rounded" style="width:0%"></div>
+          <div
+            id="progress-bar"
+            class="h-full bg-green-500 rounded"
+            style="width: 0%"
+          ></div>
         </div>
         <span id="progress-text" class="text-sm">0%</span>
       </div>
 
-      <div id="audio-container" class="flex items-center gap-2 mt-4" style="display: none">
+      <div
+        id="audio-container"
+        class="flex items-center gap-2 mt-4"
+        style="display: none"
+      >
         <audio id="audio-player" controls class="flex-grow"></audio>
-        <a id="download-link" class="bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-xl shadow transition" download="tts_output.mp3" title="下载音频" data-i18n="download_audio">
+        <a
+          id="download-link"
+          class="bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-xl shadow transition"
+          download="tts_output.mp3"
+          title="下载音频"
+          data-i18n="download_audio"
+        >
           <svg
             xmlns="http://www.w3.org/2000/svg"
             width="24"
@@ -116,70 +462,203 @@
         </a>
       </div>
 
-      <div id="error-message" class="hidden p-3 rounded-xl bg-red-200 text-red-700 text-center"></div>
-<details class="mb-4">
-  <summary class="cursor-pointer font-semibold" data-i18n="service_settings">服务设置</summary>
-  <div class="space-y-4 mt-2">
-    <div class="grid grid-cols-2 gap-4">
-      <div>
-        <label for="port-input" class="font-semibold mb-1 block" data-i18n="service_port">服务端口:</label>
-        <input type="number" id="port-input" class="w-full p-3 border border-gray-300 rounded-xl dark:bg-gray-800 dark:border-gray-600 text-gray-900 dark:text-white" />
-      </div>
-      <div>
-        <label for="chunk-size-input" class="font-semibold mb-1 block" data-i18n="chunk_size">分块大小:</label>
-        <input type="number" id="chunk-size-input" min="50" max="2000" class="w-full p-3 border border-gray-300 rounded-xl dark:bg-gray-800 dark:border-gray-600 text-gray-900 dark:text-white" />
-      </div>
-      <div>
-        <label for="sync-chunks-input" class="font-semibold mb-1 block" data-i18n="sync_chunks">初始同步分块数:</label>
-        <input type="number" id="sync-chunks-input" min="0" value="1" class="w-full p-3 border border-gray-300 rounded-xl dark:bg-gray-800 dark:border-gray-600 text-gray-900 dark:text-white" />
-      </div>
-      <div>
-        <label for="concurrency-input" class="font-semibold mb-1 block" data-i18n="concurrency">并发数:</label>
-        <input type="number" id="concurrency-input" min="1" max="100" class="w-full p-3 border border-gray-300 rounded-xl dark:bg-gray-800 dark:border-gray-600 text-gray-900 dark:text-white" />
-      </div>
-    </div>
-    <p class="text-sm text-gray-600 dark:text-gray-400" data-i18n="port_hint">端口修改需重启服务，其它设置保存后立即生效。</p>
-    <div>
-      <label for="api-token-input" class="font-semibold mb-1 block" data-i18n="api_token">API 密钥 (留空则不验证):</label>
-      <div class="flex gap-2">
-        <input type="text" id="api-token-input" class="flex-grow p-3 border border-gray-300 rounded-xl dark:bg-gray-800 dark:border-gray-600 text-gray-900 dark:text-white" data-i18n-placeholder="empty_api_hint" placeholder="留空则任何人都可以调用 API" />
-        <button id="generate-token-button" class="bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-xl shadow transition" title="生成随机密钥" data-i18n="gen_token">
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
-        </button>
-      </div>
-    </div>
-    <h3 class="font-semibold" data-i18n="openai_map">OpenAI 音色映射</h3>
-    <div id="openai-mappings-container" class="space-y-2">
-      <div class="flex justify-center"><div class="w-6 h-6 border-2 border-green-500 border-t-transparent rounded-full animate-spin"></div></div>
-    </div>
-    <button id="save-settings-button" class="bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-xl shadow transition" data-i18n="save_settings">保存设置</button>
-    <div id="settings-feedback" class="hidden text-center"></div>
-  </div>
-</details>
-
-
+      <div
+        id="error-message"
+        class="hidden p-3 rounded-xl bg-red-200 text-red-700 text-center"
+      ></div>
       <details class="mb-4">
-        <summary class="cursor-pointer font-semibold" data-i18n="api_guide">API 配置指引</summary>
-        <div class="mt-2 space-y-3">
-          <h3 class="font-semibold" data-i18n="api_endpoint">API 端点</h3>
-          <p data-i18n="api_post">所有请求都使用 POST 方法发送到以下地址:</p>
-          <pre class="bg-gray-100 dark:bg-gray-700 p-2 rounded"><code id="api-endpoint-display">正在获取地址...</code></pre>
-          <h3 class="font-semibold" data-i18n="guide_openai">1. OpenAI 兼容格式 (推荐)</h3>
-          <p><span data-i18n="openai_tip">使用 OpenAI 的标准音色名 (`shimmer`, `alloy` 等)
-            调用，服务会自动映射到您在上面设置中选择的音色。</span></p>
-          <pre class="bg-gray-100 dark:bg-gray-700 p-2 rounded"><code id="curl-example-openai">正在生成示例...</code></pre>
-          <h3 class="font-semibold" data-i18n="guide_direct">2. EdgeTTS 直接格式</h3>
-          <p><span data-i18n="direct_tip">直接使用 EdgeTTS 的完整音色名称进行调用。这种方式会绕过您的 OpenAI
-            音色映射设置。</span></p>
-          <pre class="bg-gray-100 dark:bg-gray-700 p-2 rounded"><code id="curl-example-direct">正在生成示例...</code></pre>
+        <summary
+          class="cursor-pointer font-semibold"
+          data-i18n="service_settings"
+        >
+          服务设置
+        </summary>
+        <div class="space-y-4 mt-2">
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label
+                for="port-input"
+                class="font-semibold mb-1 block"
+                data-i18n="service_port"
+                >服务端口:</label
+              >
+              <input
+                type="number"
+                id="port-input"
+                class="w-full p-3 border border-gray-300 rounded-xl dark:bg-gray-800 dark:border-gray-600 text-gray-900 dark:text-white"
+              />
+            </div>
+            <div>
+              <label
+                for="chunk-size-input"
+                class="font-semibold mb-1 block"
+                data-i18n="chunk_size"
+                >分块大小:</label
+              >
+              <input
+                type="number"
+                id="chunk-size-input"
+                min="50"
+                max="2000"
+                class="w-full p-3 border border-gray-300 rounded-xl dark:bg-gray-800 dark:border-gray-600 text-gray-900 dark:text-white"
+              />
+            </div>
+            <div>
+              <label
+                for="sync-chunks-input"
+                class="font-semibold mb-1 block"
+                data-i18n="sync_chunks"
+                >初始同步分块数:</label
+              >
+              <input
+                type="number"
+                id="sync-chunks-input"
+                min="0"
+                value="1"
+                class="w-full p-3 border border-gray-300 rounded-xl dark:bg-gray-800 dark:border-gray-600 text-gray-900 dark:text-white"
+              />
+            </div>
+            <div>
+              <label
+                for="concurrency-input"
+                class="font-semibold mb-1 block"
+                data-i18n="concurrency"
+                >并发数:</label
+              >
+              <input
+                type="number"
+                id="concurrency-input"
+                min="1"
+                max="100"
+                class="w-full p-3 border border-gray-300 rounded-xl dark:bg-gray-800 dark:border-gray-600 text-gray-900 dark:text-white"
+              />
+            </div>
+          </div>
+          <p
+            class="text-sm text-gray-600 dark:text-gray-400"
+            data-i18n="port_hint"
+          >
+            端口修改需重启服务，其它设置保存后立即生效。
+          </p>
+          <div>
+            <label
+              for="api-token-input"
+              class="font-semibold mb-1 block"
+              data-i18n="api_token"
+              >API 密钥 (留空则不验证):</label
+            >
+            <div class="flex gap-2">
+              <input
+                type="text"
+                id="api-token-input"
+                class="flex-grow p-3 border border-gray-300 rounded-xl dark:bg-gray-800 dark:border-gray-600 text-gray-900 dark:text-white"
+                data-i18n-placeholder="empty_api_hint"
+                placeholder="留空则任何人都可以调用 API"
+              />
+              <button
+                id="generate-token-button"
+                class="bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-xl shadow transition"
+                title="生成随机密钥"
+                data-i18n="gen_token"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path
+                    d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"
+                  />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <h3 class="font-semibold" data-i18n="openai_map">OpenAI 音色映射</h3>
+          <div id="openai-mappings-container" class="space-y-2">
+            <div class="flex justify-center">
+              <div
+                class="w-6 h-6 border-2 border-green-500 border-t-transparent rounded-full animate-spin"
+              ></div>
+            </div>
+          </div>
+
+          <h3 class="font-semibold mt-4" data-i18n="custom_voice_mapping">
+            自定义音色映射
+          </h3>
+          <div id="custom-voice-mappings-container" class="space-y-2">
+            <div class="flex justify-center">
+              <div
+                class="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"
+              ></div>
+            </div>
+          </div>
+          <button
+            id="save-settings-button"
+            class="bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-xl shadow transition"
+            data-i18n="save_settings"
+          >
+            保存设置
+          </button>
+          <div id="settings-feedback" class="hidden text-center"></div>
         </div>
       </details>
 
-</div>
-      <footer class="mt-8 text-center text-sm text-gray-600 dark:text-gray-400">
-        © 2025 <a href="https://github.com/samni728" target="_blank" class="underline">samni728</a> ·
-        <a href="https://github.com/samni728/Local-TTS-Service" target="_blank" class="ml-2 px-2 py-1 bg-gray-800 text-white rounded">⭐ Star on GitHub</a>
-      </footer>
+      <details class="mb-4">
+        <summary class="cursor-pointer font-semibold" data-i18n="api_guide">
+          API 配置指引
+        </summary>
+        <div class="mt-2 space-y-3">
+          <h3 class="font-semibold" data-i18n="api_endpoint">API 端点</h3>
+          <p data-i18n="api_post">所有请求都使用 POST 方法发送到以下地址:</p>
+          <pre
+            class="bg-gray-100 dark:bg-gray-700 p-2 rounded"
+          ><code id="api-endpoint-display">正在获取地址...</code></pre>
+          <h3 class="font-semibold" data-i18n="guide_openai">
+            1. OpenAI 兼容格式 (推荐)
+          </h3>
+          <p>
+            <span data-i18n="openai_tip"
+              >使用 OpenAI 的标准音色名 (`shimmer`, `alloy` 等)
+              调用，服务会自动映射到您在上面设置中选择的音色。</span
+            >
+          </p>
+          <pre
+            class="bg-gray-100 dark:bg-gray-700 p-2 rounded"
+          ><code id="curl-example-openai">正在生成示例...</code></pre>
+          <h3 class="font-semibold" data-i18n="guide_direct">
+            2. EdgeTTS 直接格式
+          </h3>
+          <p>
+            <span data-i18n="direct_tip"
+              >直接使用 EdgeTTS 的完整音色名称进行调用。这种方式会绕过您的
+              OpenAI 音色映射设置。</span
+            >
+          </p>
+          <pre
+            class="bg-gray-100 dark:bg-gray-700 p-2 rounded"
+          ><code id="curl-example-direct">正在生成示例...</code></pre>
+        </div>
+      </details>
+    </div>
+    <footer class="mt-8 text-center text-sm text-gray-600 dark:text-gray-400">
+      © 2025
+      <a href="https://github.com/samni728" target="_blank" class="underline"
+        >samni728</a
+      >
+      ·
+      <a
+        href="https://github.com/samni728/Local-TTS-Service"
+        target="_blank"
+        class="ml-2 px-2 py-1 bg-gray-800 text-white rounded"
+        >⭐ Star on GitHub</a
+      >
+    </footer>
     <script src="{{ url_for('static', filename='js/common.js') }}"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
   </body>
