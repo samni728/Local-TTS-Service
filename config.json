@@ -9,7 +9,7 @@
         "nova": "zh-TW-HsiaoChenNeural",
         "echo": "zh-HK-WanLungNeural"
     },
-    "max_concurrent_requests": 20,
+    "max_concurrent_requests": 10,
     "chunk_size": 400,
     "sync_chunks": 1,
     "sync_api_filtering": true,
@@ -21,8 +21,22 @@
         "custom_keywords": ""
     },
     "custom_voices": {
-        "wuu-CN-XiaotongNeural": "wuu-CN-XiaotongNeural",
-        "wuu-CN-YunzheNeural": "wuu-CN-YunzheNeural",
-        "zh-CN-guangxi-YunqiNeural": "zh-CN-guangxi-YunqiNeural"
-    }
+        "wuu-CN-XiaotongNeural": "晓彤（女上海话）",
+        "wuu-CN-YunzheNeural": "云泽（上海男）",
+        "zh-CN-guangxi-YunqiNeural": "zh-CN-guangxi-YunqiNeural",
+        "zh-CN-Yunxiao:DragonHDFlashLatestNeural": "yunxiaoHD 男声",
+        "zh-CN-henan-YundengNeural": "zh-CN-henan-YundengNeural",
+        "zh-HK-HiuMaanNeural": "粤语（女 HK）",
+        "zh-CN-XiaoxiaoMultilingualNeural": "晓晓（多语言女）",
+        "zh-CN-YunyeNeural": "zh-CN-YunyeNeural",
+        "zh-CN-Yunyi:DragonHDFlashLatestNeural": "云易（HD 普通话男）",
+        "zh-CN-YunfanMultilingualNeural": "云帆（多语言版）",
+        "zh-CN-Xiaochen:DragonHDLatestNeural": "晓辰（HD 普通话女）",
+        "zh-CN-Yunfan:DragonHDLatestNeural": "云帆（HD 普通话男）",
+        "en-US-ChristopherMultilingualNeural": "en-US-ChristopherMultilingualNeural",
+        "zh-CN-Yunye:DragonHDFlashLatestNeural": "云野（HD 普通话男）",
+        "zh-CN-XiaoxiaoNeural": "晓晓（多情绪版）"
+    },
+    "edge_user_id": "3c50d9318d7f4b89",
+    "edge_client_trace_id": "844e33e5db874276843c8c9d70992b53"
 }

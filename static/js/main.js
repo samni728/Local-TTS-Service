@@ -53,6 +53,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const customVoiceConfig = document.getElementById("custom-voice-config");
   const customVoiceName = document.getElementById("custom-voice-name");
   const voiceStyle = document.getElementById("voice-style");
+  const customVoiceRemark = document.getElementById("custom-voice-remark");
   const voiceRole = document.getElementById("voice-role");
   const styleDegree = document.getElementById("style-degree");
   const styleDegreeValue = document.getElementById("style-degree-value");
@@ -197,7 +198,8 @@ document.addEventListener("DOMContentLoaded", () => {
       Object.keys(customVoices).forEach((voiceName) => {
         const option = document.createElement("option");
         option.value = voiceName;
-        option.textContent = `${voiceName} (自定义)`;
+        const display = customVoices[voiceName] || voiceName;
+        option.textContent = `${display} (自定义)`;
         voiceSelect.appendChild(option);
       });
 
@@ -325,6 +327,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const addCustomVoice = async () => {
     const voiceName = customVoiceName.value.trim();
+    const remark = customVoiceRemark.value.trim();
     if (!voiceName) {
       showMessage(errorMessage, "请输入音色名称", true);
       return;
@@ -336,7 +339,7 @@ document.addEventListener("DOMContentLoaded", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           voice_name: voiceName,
-          display_name: voiceName,
+          display_name: remark || voiceName,
         }),
       });
 
@@ -344,6 +347,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const result = await response.json();
         showMessage(errorMessage, "自定义音色添加成功！", false);
         customVoiceName.value = "";
+        customVoiceRemark.value = "";
         // 重新加载配置和映射
         await loadConfig();
         populateSettingsForm();

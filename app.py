@@ -287,7 +287,9 @@ def initialize_config():
             "no_urls": True, "no_line_breaks": False, "custom_keywords": ""
         },
         "openai_voice_map": { "shimmer": "zh-CN-XiaoxiaoNeural", "alloy": "en-US-AriaNeural", "fable": "zh-CN-shaanxi-XiaoniNeural", "onyx": "en-US-ChristopherNeural", "nova": "en-US-AvaNeural", "echo": "zh-CN-YunyangNeural" },
-        "custom_voices": {}
+        "custom_voices": {},
+        "edge_user_id": "",
+        "edge_client_trace_id": ""
     }
     loaded_config = load_config_from_file()
     if loaded_config is None:
@@ -302,6 +304,15 @@ def initialize_config():
                 updated = True
         config = loaded_config
         if updated: save_config_to_file(config)
+    # 设备 ID 与追踪 ID：若为空则生成一次并持久化
+    if not config.get("edge_user_id"):
+        config["edge_user_id"] = uuid.uuid4().hex[:16]
+        save_config_to_file(config)
+        logger.info(f"Generated persistent edge_user_id: {config['edge_user_id']}")
+    if not config.get("edge_client_trace_id"):
+        config["edge_client_trace_id"] = uuid.uuid4().hex
+        save_config_to_file(config)
+        logger.info("Generated persistent edge_client_trace_id (will be reused across requests)")
     MAX_CONCURRENT_REQUESTS = config.get("max_concurrent_requests", 20)
     CHUNK_SIZE = config.get("chunk_size", 300)
     SYNC_CHUNKS = config.get("sync_chunks", 1)
@@ -468,8 +479,8 @@ async def get_microsoft_endpoint():
     try:
         # 首先调用 Microsoft Translator 端点获取真实的端点信息
         endpoint_url = "https://dev.microsofttranslator.com/apps/endpoint?api-version=1.0"
-        client_id = str(uuid.uuid4()).replace('-', '')
-        user_id = "0f04d16a175c411e"  # 默认用户ID
+        client_id = config.get("edge_client_trace_id") or str(uuid.uuid4()).replace('-', '')
+        user_id = config.get("edge_user_id") or "0f04d16a175c411e"  # 默认用户ID（回退）
         
         # 生成认证签名
         signature = await generate_microsoft_token(endpoint_url)
@@ -569,12 +580,11 @@ async def tts_with_microsoft_api(ssml_text, voice, output_format="audio-24khz-48
 def split_text_into_chunks(text, max_chunk_len=300):
     """智能文本分块，针对长文本优化"""
     text_length = len(text)
-    
-    # 对于长文本（>10000字符），适当增大块大小以减少块数量
-    if text_length > 10000:
-        max_chunk_len = min(500, max_chunk_len * 1.5)  # 最大不超过500字符
-        logger.info(f"长文本检测 ({text_length} 字符)，调整块大小为 {max_chunk_len}")
-    
+
+    # 尊重用户设定：不再因“长文本”自动调整分块大小
+    # 仅记录日志，说明使用的分块大小
+    logger.info(f"文本长度 {text_length} 字符，使用用户设定的分块大小 {max_chunk_len}")
+
     sentences = re.split(r'(?<=[。！？!?.])(?!(\d)|$)', text)
     sentences = [s.strip() for s in sentences if isinstance(s, str) and s.strip()]
 
@@ -699,6 +709,74 @@ async def run_tts(
         f"All TTS tasks completed in {total_time:.2f}s. Average chunk time: {avg_time:.2f}s. Achieved concurrency: {concurrency:.2f}x"
     )
     logger.info(f"Total retry attempts across all tasks: {total_attempts}")
+    return [r[0] if r else None for r in results]
+
+async def text_to_speech_official_first(semaphore, chunk_index, text_chunk, voice, temp_dir, voice_style="general", voice_role="", style_degree=1.0, speed=1.0, pitch=1.0):
+    task_start_time = time.time()
+    max_retries = 5
+    logger.info(f"  [Official/Task {chunk_index+1}] Starting processing for chunk: '{text_chunk[:30]}...'")
+    for attempt in range(max_retries):
+        try:
+            logger.info(
+                f"  [Official/Task {chunk_index+1}] Attempt {attempt + 1}/{max_retries} acquiring semaphore..."
+            )
+            async with semaphore:
+                logger.info(f"  [Official/Task {chunk_index+1}] Acquired semaphore. Starting Microsoft API request...")
+                temp_file_path = os.path.join(temp_dir, f"segment_{chunk_index}.mp3")
+                ssml_text = generate_ssml(text_chunk, voice, voice_style, voice_role, style_degree, speed, pitch)
+                audio_data = await tts_with_microsoft_api(ssml_text, voice)
+                with open(temp_file_path, "wb") as temp_file:
+                    temp_file.write(audio_data)
+            if os.path.getsize(temp_file_path) > 0:
+                elapsed_time = time.time() - task_start_time
+                logger.info(
+                    f"  [Official/Task {chunk_index+1}] Successfully generated in {elapsed_time:.2f}s after {attempt + 1} attempt(s)."
+                )
+                logger.info(f"  [Official/Task {chunk_index+1}] Done. Total retry attempts: {attempt + 1}")
+                return temp_file_path, attempt + 1, elapsed_time
+            else:
+                raise Exception("Official API returned empty file.")
+        except Exception as e:
+            logger.warning(f"  [Official/Task {chunk_index+1}] Attempt {attempt + 1} failed: {e}")
+            if attempt + 1 == max_retries:
+                elapsed_time = time.time() - task_start_time
+                logger.error(
+                    f"  [Official/Task {chunk_index+1}] Failed after {max_retries} attempts. Giving up."
+                )
+                logger.info(f"  [Official/Task {chunk_index+1}] Done. Total retry attempts: {attempt + 1}")
+                return None, attempt + 1, elapsed_time
+            wait_time = min(2 ** attempt, 8)
+            logger.info(f"  [Official/Task {chunk_index+1}] Retrying after {wait_time:.2f}s...")
+            await asyncio.sleep(wait_time)
+
+async def run_tts_official_first(
+    text_chunks,
+    voice,
+    temp_dir,
+    max_concurrent_requests: int | None = None,
+    voice_style: str = "general",
+    voice_role: str = "",
+    style_degree: float = 1.0,
+    speed: float = 1.0,
+    pitch: float = 1.0,
+):
+    limit = max_concurrent_requests or MAX_CONCURRENT_REQUESTS
+    logger.info(
+        f"[Step 2/4] Starting OFFICIAL-FIRST TTS generation with concurrency limit: {limit}..."
+    )
+    semaphore = asyncio.Semaphore(limit)
+    start_time = time.time()
+    tasks = [text_to_speech_official_first(semaphore, i, chunk, voice, temp_dir, voice_style, voice_role, style_degree, speed, pitch) for i, chunk in enumerate(text_chunks)]
+    results = await asyncio.gather(*tasks)
+    total_time = time.time() - start_time
+    durations = [r[2] for r in results if r is not None]
+    total_attempts = sum(r[1] for r in results if r is not None)
+    avg_time = sum(durations) / len(durations) if durations else 0
+    concurrency = (sum(durations) / total_time) if total_time > 0 else 0
+    logger.info(
+        f"All OFFICIAL-FIRST TTS tasks completed in {total_time:.2f}s. Average chunk time: {avg_time:.2f}s. Achieved concurrency: {concurrency:.2f}x"
+    )
+    logger.info(f"Total retry attempts across all OFFICIAL-FIRST tasks: {total_attempts}")
     return [r[0] if r else None for r in results]
 
 # --- Flask 路由和 API ---
@@ -949,7 +1027,8 @@ async def generate_speech():
                     content_type="audio/mpeg",
                 )
 
-            temp_file_paths = await run_tts(
+            # 非流式：优先使用官方 API（稳定性优先）
+            temp_file_paths = await run_tts_official_first(
                 text_chunks,
                 final_voice,
                 temp_dir,
