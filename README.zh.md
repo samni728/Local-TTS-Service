@@ -23,7 +23,7 @@ _English version available in [README.md](README.md)._
 
 ### 从旧版升级
 
-这一版会自动将旧的 `openai_voice_map` 迁移为新的完整音色预设。使用 Docker 的 VPS 必须在拉取前备份 `config.json`，并在更新后重新构建镜像；完整命令见 [VPS 上更新现有 Docker 部署](#vps-上更新现有-docker-部署)。
+这一版会自动将旧的 `openai_voice_map` 迁移为新的完整音色预设。使用 Docker 的 VPS 必须在拉取前备份 `config.json`，并在更新后重新构建镜像；完整命令见 [VPS 上更新现有 Docker 部署](#vps-上更新现有-docker-部署)。旧 `.env` 没有 `FLASK_SECRET_KEY` 或该值为空时，程序会自动生成固定密钥并保存到 `tts_data/.flask_secret_key`，不会再等到登录成功后才因 Session 不可用返回 HTTP 500。
 
 ## 🌟 为什么选择 LocalTTS？
 
@@ -110,6 +110,12 @@ git restore config.json
 git pull --ff-only
 cp "$CONFIG_BACKUP" config.json
 
+# 不显示密码或 Token，只列出新版 .env.example 中新增但本机缺少的变量名
+[ -f .env ] || cp .env.example .env
+for key in $(grep -E '^[A-Z0-9_]+=' .env.example | cut -d= -f1); do
+  grep -q "^${key}=" .env || echo "缺少环境变量：${key}"
+done
+
 docker compose config --quiet
 docker compose up -d --build --remove-orphans
 docker compose ps
@@ -125,6 +131,8 @@ FLASK_SECRET_KEY=请使用-openssl-rand-hex-32-生成的固定值
 ```
 
 - `TTS_PORT` 是 VPS 对外端口；容器内部固定使用 `5050`，不会再受 WebUI 端口配置影响。
+- `FLASK_SECRET_KEY` 仍建议在生产环境显式设置；如果旧 `.env` 没有该变量或值为空，程序会自动生成 64 位十六进制密钥并保存到 `tts_data/.flask_secret_key`。该目录已由 Docker 挂载持久化，因此重建镜像和重启容器不会轮换 Session 密钥。
+- 如果无法写入持久化密钥文件，服务仍能启动，但日志会明确警告正在使用内存密钥；这种情况下容器重启会使已有登录 Session 失效。
 - 国内 VPS 如果 Debian 软件源较慢，可以设置 `USE_CHINA_MIRRORS=true` 后重新构建。
 - `config.json` 当前仍由 Git 跟踪，因此 VPS 更新必须按上面流程先备份再恢复；不要直接在有本地配置改动时强行拉取。
 - 不要使用 `docker compose down -v` 清理数据。当前使用绑定挂载，但更新前保留仓库外备份仍是推荐做法。

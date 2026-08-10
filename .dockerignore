@@ -11,4 +11,5 @@ __pycache__
 .ruff_cache
 tests
 config.json
+tts_data/.flask_secret_key
 static/screen

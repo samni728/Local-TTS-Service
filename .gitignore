@@ -4,6 +4,7 @@ __pycache__/
 *.pyo
 *.pyd
 .env
+tts_data/.flask_secret_key
 # Conda environment
 /env/
 /venv/
@@ -14,4 +15,4 @@ __pycache__/
 *.swp
 .DS_Store
 #Config file (optional, if you don't want to commit default config)
-#config.json 
+#config.json

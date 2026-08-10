@@ -23,7 +23,7 @@ This release focuses on Microsoft/Azure voice capabilities, complete OpenAI-comp
 
 ### Upgrading from an earlier release
 
-Legacy `openai_voice_map` entries migrate automatically to the new full voice preset format. Docker-based VPS deployments must back up `config.json` before pulling and rebuild the image after updating. See [Updating an existing Docker deployment on a VPS](#updating-an-existing-docker-deployment-on-a-vps) for the complete commands.
+Legacy `openai_voice_map` entries migrate automatically to the new full voice preset format. Docker-based VPS deployments must back up `config.json` before pulling and rebuild the image after updating. See [Updating an existing Docker deployment on a VPS](#updating-an-existing-docker-deployment-on-a-vps) for the complete commands. If an older `.env` does not contain `FLASK_SECRET_KEY`, or contains an empty value, the service now creates a stable key in `tts_data/.flask_secret_key` instead of failing with HTTP 500 after login.
 
 ## 🌟 Why choose LocalTTS?
 
@@ -105,13 +105,20 @@ cp config.json "$CONFIG_BACKUP"
 git restore config.json
 git pull --ff-only
 cp "$CONFIG_BACKUP" config.json
+
+# Print only missing variable names; never print passwords or token values.
+[ -f .env ] || cp .env.example .env
+for key in $(grep -E '^[A-Z0-9_]+=' .env.example | cut -d= -f1); do
+  grep -q "^${key}=" .env || echo "Missing environment variable: ${key}"
+done
+
 docker compose config --quiet
 docker compose up -d --build --remove-orphans
 docker compose ps
 docker compose logs --tail=100 tts-service
 ```
 
-Set at least `TTS_PORT`, a strong `WEBUI_PASSWORD`, and a stable `FLASK_SECRET_KEY` in `.env`. The external port is controlled by `TTS_PORT`; the container always listens on port `5050`.
+Set at least `TTS_PORT` and a strong `WEBUI_PASSWORD` in `.env`; explicitly setting a stable `FLASK_SECRET_KEY` is recommended for production. If it is missing or empty, the service creates a 64-character hexadecimal key in `tts_data/.flask_secret_key`. That directory is bind-mounted by Docker, so image rebuilds and container restarts reuse the same key. If the file cannot be written, startup continues with a clear warning and an in-memory key, which means existing login sessions reset after restart. The external port is controlled by `TTS_PORT`; the container always listens on port `5050`.
 
 ### Microsoft TLS certificate compatibility
 

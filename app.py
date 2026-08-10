@@ -47,6 +47,74 @@ logging.basicConfig(level=logging.INFO, format='[%(asctime)s] [%(levelname)s] - 
 logger = logging.getLogger(__name__)
 logger.info("TLS trust source: %s", TLS_TRUST_SOURCE)
 
+
+def resolve_flask_secret_key(secret_file: str | None = None) -> str:
+    """Return an explicit secret or create a stable local fallback.
+
+    Docker Compose expands an unset ``FLASK_SECRET_KEY`` to an empty string.
+    Treating that value as a real Flask key disables sessions and makes login
+    fail with HTTP 500. The fallback file lives in the persistent ``tts_data``
+    mount so upgrades and container restarts keep existing sessions valid.
+    """
+
+    configured_secret = os.environ.get("FLASK_SECRET_KEY", "").strip()
+    if configured_secret:
+        logger.info("Flask session secret source: FLASK_SECRET_KEY")
+        return configured_secret
+
+    secret_path = (
+        secret_file
+        or os.environ.get("FLASK_SECRET_FILE", "").strip()
+        or os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "tts_data",
+            ".flask_secret_key",
+        )
+    )
+    try:
+        if os.path.exists(secret_path):
+            with open(secret_path, "r", encoding="utf-8") as secret_handle:
+                persisted_secret = secret_handle.read().strip()
+            if persisted_secret:
+                logger.info("Flask session secret source: persistent fallback file")
+                return persisted_secret
+
+        os.makedirs(os.path.dirname(secret_path) or ".", exist_ok=True)
+        generated_secret = secrets.token_hex(32)
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+        try:
+            file_descriptor = os.open(secret_path, flags, 0o600)
+        except FileExistsError:
+            # Another process may have created the file between the existence
+            # check and the atomic create. Reuse it instead of rotating keys.
+            with open(secret_path, "r", encoding="utf-8") as secret_handle:
+                persisted_secret = secret_handle.read().strip()
+            if persisted_secret:
+                return persisted_secret
+            file_descriptor = os.open(secret_path, os.O_WRONLY | os.O_TRUNC, 0o600)
+
+        with os.fdopen(file_descriptor, "w", encoding="utf-8") as secret_handle:
+            secret_handle.write(generated_secret)
+            secret_handle.write("\n")
+        try:
+            os.chmod(secret_path, 0o600)
+        except OSError:
+            pass
+        logger.warning(
+            "FLASK_SECRET_KEY is empty; generated a persistent fallback at %s. "
+            "Setting FLASK_SECRET_KEY explicitly is still recommended for production.",
+            secret_path,
+        )
+        return generated_secret
+    except OSError as error:
+        logger.error(
+            "Could not persist a Flask session secret at %s: %s. "
+            "Using an in-memory key; sessions will reset after restart.",
+            secret_path,
+            error,
+        )
+        return secrets.token_hex(32)
+
 # Microsoft Edge TTS API 配置
 MICROSOFT_TTS_KEY = "oik6PdDdMnOXemTbwvMn9de/h9lFnfBaCWbGMMZqqoSaQaqUOqjVGm5NqsmjcBI1x+sS9ugjB55HEJWRiFXYFw=="
 MICROSOFT_TTS_REGIONS = [
@@ -68,7 +136,7 @@ MICROSOFT_TTS_REGIONS = [
 ]
 app = Flask(__name__)
 CORS(app)
-app.secret_key = os.environ.get('FLASK_SECRET_KEY', secrets.token_hex(24))
+app.secret_key = resolve_flask_secret_key()
 
 # --- 配置文件路径与全局变量 ---
 CONFIG_FILE = 'config.json'
