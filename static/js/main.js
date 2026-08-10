@@ -19,6 +19,21 @@ document.addEventListener("DOMContentLoaded", () => {
   const textInput = document.getElementById("text-input");
   const languageSelect = document.getElementById("language-select");
   const voiceSelect = document.getElementById("voice-select");
+  const voiceFilters = document.getElementById("voice-filters");
+  const voiceSearch = document.getElementById("voice-search");
+  const voiceGenderFilter = document.getElementById("voice-gender-filter");
+  const voiceTypeFilter = document.getElementById("voice-type-filter");
+  const filterSupportsStyle = document.getElementById(
+    "filter-supports-style"
+  );
+  const filterSupportsRole = document.getElementById("filter-supports-role");
+  const filterEdgeAvailable = document.getElementById(
+    "filter-edge-available"
+  );
+  const voiceResultCount = document.getElementById("voice-result-count");
+  const voiceCapabilitySummary = document.getElementById(
+    "voice-capability-summary"
+  );
   const speakButton = document.getElementById("speak-button");
   const audioContainer = document.getElementById("audio-container");
   const audioPlayer = document.getElementById("audio-player");
@@ -37,6 +52,19 @@ document.addEventListener("DOMContentLoaded", () => {
   const charCounter = document.getElementById("char-counter");
   const autoPlayCheckbox = document.getElementById("auto-play");
   const streamPlayCheckbox = document.getElementById("stream-play");
+  const openaiPresetAlias = document.getElementById("openai-preset-alias");
+  const saveOpenaiPresetButton = document.getElementById(
+    "save-openai-preset-button"
+  );
+  const loadOpenaiPresetButton = document.getElementById(
+    "load-openai-preset-button"
+  );
+  const openaiPresetSummary = document.getElementById(
+    "openai-preset-summary"
+  );
+  const openaiPresetFeedback = document.getElementById(
+    "openai-preset-feedback"
+  );
   const concurrencyInput = document.getElementById("concurrency-input");
   const chunkSizeInput = document.getElementById("chunk-size-input");
   const syncChunksInput = document.getElementById("sync-chunks-input");
@@ -51,6 +79,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // 自定义声音配置元素
   const customVoiceConfig = document.getElementById("custom-voice-config");
+  const customVoiceManagement = document.getElementById(
+    "custom-voice-management"
+  );
   const customVoiceName = document.getElementById("custom-voice-name");
   const voiceStyle = document.getElementById("voice-style");
   const customVoiceRemark = document.getElementById("custom-voice-remark");
@@ -68,6 +99,37 @@ document.addEventListener("DOMContentLoaded", () => {
   const customVoiceMappingsContainer = document.getElementById(
     "custom-voice-mappings-container"
   );
+
+  const STYLE_LABELS = {
+    angry: "愤怒",
+    calm: "平静",
+    cheerful: "开朗",
+    conversation: "对话",
+    empathetic: "同理心",
+    excited: "兴奋",
+    fearful: "害怕",
+    friendly: "友好",
+    gentle: "温柔",
+    hopeful: "希望",
+    "narration-professional": "专业旁白",
+    "narration-relaxed": "轻松旁白",
+    newscast: "新闻播报",
+    sad: "悲伤",
+    serious: "严肃",
+    shouting: "呐喊",
+    whispering: "耳语",
+  };
+  const ROLE_LABELS = {
+    Boy: "男孩",
+    Girl: "女孩",
+    Narrator: "旁白",
+    YoungAdultFemale: "年轻女性",
+    YoungAdultMale: "年轻男性",
+    OlderAdultFemale: "成年女性",
+    OlderAdultMale: "成年男性",
+    SeniorFemale: "老年女性",
+    SeniorMale: "老年男性",
+  };
 
   const mediaSourceSupported =
     typeof window.MediaSource !== "undefined" &&
@@ -154,44 +216,146 @@ document.addEventListener("DOMContentLoaded", () => {
     const authHeader = token ? ` \\\n-H "Authorization: Bearer ${token}"` : "";
     if (apiEndpointDisplay) apiEndpointDisplay.textContent = apiUrl;
     if (curlExampleOpenAI)
-      curlExampleOpenAI.textContent = `curl -X POST ${apiUrl}${authHeader} \\\n-H "Content-Type: application/json" \\\n-d '{\n  "model": "tts-1",\n  "input": "你好，这是一个兼容 OpenAI 的测试。",\n  "voice": "shimmer"\n}' --output openai_test.mp3`;
+      curlExampleOpenAI.textContent = `curl -X POST ${apiUrl}${authHeader} \\\n-H "Content-Type: application/json" \\\n-d '{\n  "model": "tts-1",\n  "input": "你好，这将自动使用 WebUI 中保存的 shimmer 完整音色预设。",\n  "voice": "shimmer"\n}' --output openai_test.mp3`;
     if (curlExampleDirect)
-      curlExampleDirect.textContent = `curl -X POST ${apiUrl}${authHeader} \\\n-H "Content-Type: application/json" \\\n-d '{\n  "model": "tts-1",\n  "input": "Hello, this is a direct voice test.",\n  "voice": "en-US-AriaNeural"\n}' --output direct_test.mp3`;
+      curlExampleDirect.textContent = `curl -X POST ${apiUrl}${authHeader} \\\n-H "Content-Type: application/json" \\\n-d '{\n  "model": "tts-1",\n  "input": "这是一段带角色和语气强度的测试。",\n  "voice": "zh-CN-XiaomoNeural",\n  "style": "cheerful",\n  "role": "YoungAdultFemale",\n  "style_degree": 1.35,\n  "speed": 1.05,\n  "pitch": 1.0,\n  "strict_capabilities": true\n}' --output direct_test.mp3`;
   };
 
   // 获取当前声音配置
   const getVoiceConfig = () => {
     const selectedLocale = languageSelect.value;
+    const selectedVoice =
+      voiceSelect.value ||
+      (selectedLocale === "custom" ? customVoiceName.value.trim() : "");
+    return {
+      voice: selectedVoice || "zh-CN-XiaoxiaoNeural",
+      style: voiceStyle.value || "general",
+      role: voiceRole.value || "",
+      styleDegree: parseFloat(styleDegree.value) || 1.0,
+      speed: parseFloat(speed.value) || 1.0,
+      pitch: parseFloat(pitch.value) || 1.0,
+    };
+  };
 
-    if (selectedLocale === "custom") {
-      // 优先使用选择声音下拉框中的值，如果没有选择则使用输入框中的值
-      const selectedVoice = voiceSelect.value || customVoiceName.value.trim();
-      return {
-        voice: selectedVoice || "zh-CN-XiaoxiaoNeural",
-        style: voiceStyle.value || "general",
-        role: voiceRole.value || "",
-        styleDegree: parseFloat(styleDegree.value) || 1.0,
-        speed: parseFloat(speed.value) || 1.0,
-        pitch: parseFloat(pitch.value) || 1.0,
-      };
+  const getCleaningOptions = () => {
+    const cleaningOptions = {};
+    document
+      .querySelectorAll('#cleaning-options input[type="checkbox"]')
+      .forEach((checkbox) => {
+        cleaningOptions[checkbox.name] = checkbox.checked;
+      });
+    cleaningOptions.custom_keywords =
+      document.getElementById("custom-keywords").value;
+    return cleaningOptions;
+  };
+
+  const getOpenaiPreset = (alias) => {
+    const preset = currentConfig.openai_voice_presets?.[alias];
+    if (preset && typeof preset === "object") return preset;
+    const legacyVoice = currentConfig.openai_voice_map?.[alias];
+    return legacyVoice ? { voice: legacyVoice } : null;
+  };
+
+  const formatPresetSummary = (alias, preset) => {
+    if (!preset?.voice) return `${alias} 尚未配置。`;
+    const styleLabel =
+      !preset.style || preset.style === "general"
+        ? "默认风格"
+        : STYLE_LABELS[preset.style] || preset.style;
+    const roleLabel = preset.role
+      ? ROLE_LABELS[preset.role] || preset.role
+      : "默认角色";
+    const speedText = Number(preset.speed ?? 1).toFixed(2);
+    const pitchText = Number(preset.pitch ?? 1).toFixed(2);
+    const degreeText = Number(preset.style_degree ?? 1).toFixed(2);
+    const filterText = preset.cleaning_options
+      ? "已保存文本过滤"
+      : "使用全局文本过滤";
+    return `${alias} → ${preset.voice} · ${styleLabel} · ${roleLabel} · 强度 ${degreeText} · 语速 ${speedText} · 音调 ${pitchText} · ${filterText}`;
+  };
+
+  const refreshOpenaiPresetSummary = () => {
+    const alias = openaiPresetAlias.value;
+    const preset = getOpenaiPreset(alias);
+    openaiPresetSummary.textContent = formatPresetSummary(alias, preset);
+    loadOpenaiPresetButton.disabled = !preset?.voice;
+  };
+
+  const populateCapabilitySelect = (
+    select,
+    values,
+    defaultLabel,
+    labels = {}
+  ) => {
+    const previousValue = select.value;
+    select.innerHTML = "";
+    const defaultOption = document.createElement("option");
+    defaultOption.value = "";
+    defaultOption.textContent = defaultLabel;
+    select.appendChild(defaultOption);
+    values.forEach((value) => {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = labels[value] ? `${labels[value]} (${value})` : value;
+      select.appendChild(option);
+    });
+    select.value = values.includes(previousValue) ? previousValue : "";
+    select.disabled = values.length === 0;
+  };
+
+  const updateVoiceCapabilities = () => {
+    const isCustom = languageSelect.value === "custom";
+    const selectedVoice = allVoices.find(
+      (voice) => voice.name === voiceSelect.value
+    );
+    customVoiceConfig.classList.toggle(
+      "hidden",
+      !isCustom && !selectedVoice
+    );
+    customVoiceManagement.classList.toggle("hidden", !isCustom);
+
+    const allStyles = [
+      ...new Set(allVoices.flatMap((voice) => voice.styles || [])),
+    ].sort();
+    const allRoles = [
+      ...new Set(allVoices.flatMap((voice) => voice.roles || [])),
+    ].sort();
+    const styles = isCustom ? allStyles : selectedVoice?.styles || [];
+    const roles = isCustom ? allRoles : selectedVoice?.roles || [];
+    populateCapabilitySelect(voiceStyle, styles, "默认风格", STYLE_LABELS);
+    populateCapabilitySelect(voiceRole, roles, "默认角色", ROLE_LABELS);
+    styleDegree.disabled = voiceStyle.disabled || !voiceStyle.value;
+
+    if (!isCustom && selectedVoice) {
+      const source = selectedVoice.edge_available
+        ? "Edge 清单 + Azure 文档"
+        : "Azure 文档（实际可用性取决于微软端点/区域）";
+      const styleText = selectedVoice.styles.length
+        ? `情绪 ${selectedVoice.styles.length} 种`
+        : "不支持情绪";
+      const roleText = selectedVoice.roles.length
+        ? `角色 ${selectedVoice.roles.length} 种`
+        : "不支持角色";
+      voiceCapabilitySummary.textContent = `${selectedVoice.gender} · ${selectedVoice.voice_type} · ${styleText} · ${roleText} · ${source}`;
+      voiceCapabilitySummary.classList.remove("hidden");
+    } else if (isCustom) {
+      voiceCapabilitySummary.textContent =
+        "自定义音色能力未知；请选择微软实际支持的情绪和角色参数。";
+      voiceCapabilitySummary.classList.remove("hidden");
     } else {
-      return {
-        voice: voiceSelect.value,
-        style: "general",
-        role: "",
-        styleDegree: 1.0,
-        speed: parseFloat(speed.value) || 1.0,
-        pitch: parseFloat(pitch.value) || 1.0,
-      };
+      voiceCapabilitySummary.classList.add("hidden");
     }
   };
 
   const updateVoiceList = (selectedLocale) => {
+    const previousVoice = voiceSelect.value;
     voiceSelect.innerHTML = "";
 
     // 如果是自定义配置，显示自定义面板
     if (selectedLocale === "custom") {
       customVoiceConfig.classList.remove("hidden");
+      customVoiceManagement.classList.remove("hidden");
+      voiceFilters.classList.add("hidden");
 
       // 添加自定义音色到下拉框
       const customVoices = currentConfig.custom_voices || {};
@@ -205,28 +369,196 @@ document.addEventListener("DOMContentLoaded", () => {
 
       voiceSelect.disabled = false;
     } else {
-      customVoiceConfig.classList.add("hidden");
+      customVoiceManagement.classList.add("hidden");
+      voiceFilters.classList.toggle("hidden", !selectedLocale);
     }
 
-    const filteredVoices = allVoices.filter((v) => v.locale === selectedLocale);
+    let filteredVoices = allVoices.filter((v) => v.locale === selectedLocale);
+    if (voiceGenderFilter.value) {
+      filteredVoices = filteredVoices.filter(
+        (voice) => voice.gender === voiceGenderFilter.value
+      );
+    }
+    if (voiceTypeFilter.value) {
+      filteredVoices = filteredVoices.filter(
+        (voice) => voice.voice_type === voiceTypeFilter.value
+      );
+    }
+    if (filterSupportsStyle.checked) {
+      filteredVoices = filteredVoices.filter((voice) => voice.supports_style);
+    }
+    if (filterSupportsRole.checked) {
+      filteredVoices = filteredVoices.filter((voice) => voice.supports_role);
+    }
+    if (filterEdgeAvailable.checked) {
+      filteredVoices = filteredVoices.filter((voice) => voice.edge_available);
+    }
+    const query = voiceSearch.value.trim().toLowerCase();
+    if (query) {
+      filteredVoices = filteredVoices.filter((voice) =>
+        [
+          voice.name,
+          voice.short_name,
+          voice.voice_type,
+          ...(voice.styles || []),
+          ...(voice.roles || []),
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(query)
+      );
+    }
 
     // 添加标准音色
     filteredVoices.forEach((voice) => {
       const option = document.createElement("option");
       option.value = voice.name;
-      option.textContent = `${voice.short_name} (${voice.gender})`;
+      const capabilities = [
+        voice.supports_style ? "情绪" : "",
+        voice.supports_role ? "角色" : "",
+      ]
+        .filter(Boolean)
+        .join("+");
+      option.textContent = `${voice.short_name} · ${voice.gender} · ${voice.voice_type}${capabilities ? ` · ${capabilities}` : ""}`;
       voiceSelect.appendChild(option);
     });
+    voiceResultCount.textContent = selectedLocale
+      ? `显示 ${filteredVoices.length} 个音色`
+      : "";
 
     // 注意：自定义音色只在"自定义音色配置"模式下显示，不在普通语言选择中显示
 
     if (voiceSelect.children.length === 0) {
       voiceSelect.innerHTML = "<option>无可用声音</option>";
       voiceSelect.disabled = true;
+      updateVoiceCapabilities();
       return;
     }
 
     voiceSelect.disabled = false;
+    if ([...voiceSelect.options].some((option) => option.value === previousVoice)) {
+      voiceSelect.value = previousVoice;
+    }
+    updateVoiceCapabilities();
+  };
+
+  const applyOpenaiPresetToForm = (alias) => {
+    const preset = getOpenaiPreset(alias);
+    if (!preset?.voice) {
+      showMessage(openaiPresetFeedback, `${alias} 尚未配置。`, true);
+      return;
+    }
+
+    const catalogVoice = allVoices.find((voice) => voice.name === preset.voice);
+    languageSelect.value = catalogVoice?.locale || "custom";
+    updateVoiceList(languageSelect.value);
+    if ([...voiceSelect.options].some((option) => option.value === preset.voice)) {
+      voiceSelect.value = preset.voice;
+    } else if (languageSelect.value === "custom") {
+      customVoiceName.value = preset.voice;
+    }
+    updateVoiceCapabilities();
+
+    voiceStyle.value =
+      preset.style && preset.style !== "general" ? preset.style : "";
+    voiceRole.value = preset.role || "";
+    styleDegree.value = String(preset.style_degree ?? 1);
+    styleDegreeValue.textContent = Number(styleDegree.value).toFixed(2);
+    styleDegree.disabled = !voiceStyle.value;
+    speed.value = String(preset.speed ?? 1);
+    speedValue.textContent = Number(speed.value).toFixed(2);
+    pitch.value = String(preset.pitch ?? 1);
+    pitchValue.textContent = Number(pitch.value).toFixed(2);
+
+    if (preset.cleaning_options) {
+      document
+        .querySelectorAll('#cleaning-options input[type="checkbox"]')
+        .forEach((checkbox) => {
+          checkbox.checked = Boolean(preset.cleaning_options[checkbox.name]);
+        });
+      document.getElementById("custom-keywords").value =
+        preset.cleaning_options.custom_keywords || "";
+    }
+    showMessage(openaiPresetFeedback, `已载入 ${alias} 的完整配置。`);
+  };
+
+  const renderOpenaiMappings = () => {
+    mappingsContainer.innerHTML = "";
+    OPENAI_VOICE_ALIASES.forEach((alias) => {
+      const preset = getOpenaiPreset(alias);
+      const wrapper = document.createElement("div");
+      wrapper.className =
+        "flex flex-col md:flex-row md:items-center gap-2 p-2 bg-gray-50 dark:bg-gray-700 rounded-xl";
+
+      const aliasLabel = document.createElement("span");
+      aliasLabel.className = "md:w-20 font-semibold";
+      aliasLabel.textContent = alias;
+
+      const summary = document.createElement("span");
+      summary.className = "flex-1 text-sm break-all";
+      summary.textContent = formatPresetSummary(alias, preset);
+
+      const loadButton = document.createElement("button");
+      loadButton.type = "button";
+      loadButton.className =
+        "bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded-lg text-sm";
+      loadButton.textContent = "载入试听区";
+      loadButton.disabled = !preset?.voice;
+      loadButton.addEventListener("click", () => {
+        openaiPresetAlias.value = alias;
+        refreshOpenaiPresetSummary();
+        applyOpenaiPresetToForm(alias);
+      });
+
+      wrapper.append(aliasLabel, summary, loadButton);
+      mappingsContainer.appendChild(wrapper);
+    });
+  };
+
+  const saveCurrentAsOpenaiPreset = async () => {
+    const alias = openaiPresetAlias.value;
+    const voiceConfig = getVoiceConfig();
+    if (!voiceConfig.voice || voiceSelect.disabled) {
+      showMessage(openaiPresetFeedback, "请先选择并试听一个有效音色。", true);
+      return;
+    }
+
+    saveOpenaiPresetButton.disabled = true;
+    try {
+      const response = await fetch(
+        `/v1/openai-voice-presets/${encodeURIComponent(alias)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            voice: voiceConfig.voice,
+            style: voiceConfig.style,
+            role: voiceConfig.role,
+            style_degree: voiceConfig.styleDegree,
+            speed: voiceConfig.speed,
+            pitch: voiceConfig.pitch,
+            cleaning_options: getCleaningOptions(),
+          }),
+        }
+      );
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "保存失败");
+
+      currentConfig.openai_voice_presets ||= {};
+      currentConfig.openai_voice_map ||= {};
+      currentConfig.openai_voice_presets[alias] = result.preset;
+      currentConfig.openai_voice_map[alias] = result.preset.voice;
+      refreshOpenaiPresetSummary();
+      renderOpenaiMappings();
+      showMessage(
+        openaiPresetFeedback,
+        `${alias} 已映射到当前试听配置，标准 OpenAI API 调用将自动应用。`
+      );
+    } catch (error) {
+      showMessage(openaiPresetFeedback, `保存失败：${error.message}`, true);
+    } finally {
+      saveOpenaiPresetButton.disabled = false;
+    }
   };
 
   const populateSettingsForm = () => {
@@ -246,35 +578,8 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("custom-keywords").value =
       opts.custom_keywords || "";
 
-    mappingsContainer.innerHTML = "";
-    OPENAI_VOICE_ALIASES.forEach((alias) => {
-      const currentMapping = currentConfig.openai_voice_map[alias];
-      const wrapper = document.createElement("div");
-      wrapper.className = "flex items-center gap-2";
-      wrapper.innerHTML = `<span class="w-28 text-right font-semibold">${alias}</span><select id="mapping-${alias}" class="flex-1 p-2 border rounded-xl dark:bg-gray-700 dark:border-gray-600"></select>`;
-      const select = wrapper.querySelector("select");
-
-      // 添加标准音色选项
-      allVoices.forEach((voice) => {
-        const option = document.createElement("option");
-        option.value = voice.name;
-        option.textContent = `${voice.name} (${voice.gender})`;
-        if (voice.name === currentMapping) option.selected = true;
-        select.appendChild(option);
-      });
-
-      // 添加自定义音色选项
-      const customVoices = currentConfig.custom_voices || {};
-      Object.keys(customVoices).forEach((voiceName) => {
-        const option = document.createElement("option");
-        option.value = voiceName;
-        option.textContent = `${voiceName} (自定义)`;
-        if (voiceName === currentMapping) option.selected = true;
-        select.appendChild(option);
-      });
-
-      mappingsContainer.appendChild(wrapper);
-    });
+    renderOpenaiMappings();
+    refreshOpenaiPresetSummary();
 
     // 加载自定义音色映射
     loadCustomVoiceMappings();
@@ -411,7 +716,10 @@ document.addEventListener("DOMContentLoaded", () => {
       max_concurrent_requests: parseInt(concurrencyInput.value, 10),
       sync_api_filtering: syncApiFilteringCheckbox.checked,
       default_cleaning_options: {},
-      openai_voice_map: {},
+      openai_voice_map: { ...(currentConfig.openai_voice_map || {}) },
+      openai_voice_presets: {
+        ...(currentConfig.openai_voice_presets || {}),
+      },
     };
     document
       .querySelectorAll('#cleaning-options input[type="checkbox"]')
@@ -420,11 +728,6 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     newConfig.default_cleaning_options["custom_keywords"] =
       document.getElementById("custom-keywords").value;
-    OPENAI_VOICE_ALIASES.forEach((alias) => {
-      const select = document.getElementById(`mapping-${alias}`);
-      if (select) newConfig.openai_voice_map[alias] = select.value;
-    });
-
     return newConfig;
   };
 
@@ -442,7 +745,7 @@ document.addEventListener("DOMContentLoaded", () => {
       })
       .then((result) => {
         console.log("Config saved:", result.message);
-        currentConfig = newConfig;
+        currentConfig = { ...currentConfig, ...newConfig };
         showMessage(feedbackTarget, "设置已保存");
       })
       .catch((error) => {
@@ -479,14 +782,7 @@ document.addEventListener("DOMContentLoaded", () => {
         headers["Authorization"] = `Bearer ${currentConfig.api_token}`;
       }
 
-      const cleaningOptions = {};
-      document
-        .querySelectorAll('#cleaning-options input[type="checkbox"]')
-        .forEach((checkbox) => {
-          cleaningOptions[checkbox.name] = checkbox.checked;
-        });
-      cleaningOptions["custom_keywords"] =
-        document.getElementById("custom-keywords").value;
+      const cleaningOptions = getCleaningOptions();
 
       const requestBody = {
         model: "tts-1",
@@ -494,15 +790,17 @@ document.addEventListener("DOMContentLoaded", () => {
         voice: voiceConfig.voice,
         speed: voiceConfig.speed,
         pitch: voiceConfig.pitch,
+        style_degree: voiceConfig.styleDegree,
+        strict_capabilities: languageSelect.value !== "custom",
         cleaning_options: cleaningOptions,
         stream: streamPlayCheckbox.checked && mediaSourceSupported,
       };
 
-      // 添加自定义声音参数
-      if (languageSelect.value === "custom") {
+      if (voiceConfig.style && voiceConfig.style !== "general") {
         requestBody.style = voiceConfig.style;
+      }
+      if (voiceConfig.role) {
         requestBody.role = voiceConfig.role;
-        requestBody.styleDegree = voiceConfig.styleDegree;
       }
 
       const response = await fetch("/v1/audio/speech", {
@@ -650,6 +948,16 @@ document.addEventListener("DOMContentLoaded", () => {
       allVoices = await voicesResponse.json();
       currentConfig = await configResponse.json();
 
+      const voiceTypes = [
+        ...new Set(allVoices.map((voice) => voice.voice_type).filter(Boolean)),
+      ];
+      voiceTypes.forEach((voiceType) => {
+        const option = document.createElement("option");
+        option.value = voiceType;
+        option.textContent = voiceType;
+        voiceTypeFilter.appendChild(option);
+      });
+
       textInput.addEventListener("input", updateCharCount);
       languageSelect.addEventListener("change", () =>
         updateVoiceList(languageSelect.value)
@@ -660,7 +968,22 @@ document.addEventListener("DOMContentLoaded", () => {
         if (languageSelect.value === "custom" && voiceSelect.value) {
           customVoiceName.value = voiceSelect.value;
         }
+        updateVoiceCapabilities();
       });
+      [voiceGenderFilter, voiceTypeFilter].forEach((element) =>
+        element.addEventListener("change", () =>
+          updateVoiceList(languageSelect.value)
+        )
+      );
+      [filterSupportsStyle, filterSupportsRole, filterEdgeAvailable].forEach(
+        (element) =>
+          element.addEventListener("change", () =>
+            updateVoiceList(languageSelect.value)
+          )
+      );
+      voiceSearch.addEventListener("input", () =>
+        updateVoiceList(languageSelect.value)
+      );
       speakButton.addEventListener("click", handleSpeakClick);
       generateTokenButton.addEventListener("click", () => {
         apiTokenInput.value = generateRandomToken();
@@ -691,10 +1014,21 @@ document.addEventListener("DOMContentLoaded", () => {
       saveFilteringButton.addEventListener("click", () =>
         saveConfig(filteringFeedback)
       );
+      openaiPresetAlias.addEventListener("change", refreshOpenaiPresetSummary);
+      saveOpenaiPresetButton.addEventListener(
+        "click",
+        saveCurrentAsOpenaiPreset
+      );
+      loadOpenaiPresetButton.addEventListener("click", () =>
+        applyOpenaiPresetToForm(openaiPresetAlias.value)
+      );
 
       // 风格强度滑块事件监听器
       styleDegree.addEventListener("input", () => {
         styleDegreeValue.textContent = parseFloat(styleDegree.value).toFixed(2);
+      });
+      voiceStyle.addEventListener("change", () => {
+        styleDegree.disabled = !voiceStyle.value;
       });
 
       // 语速滑块事件监听器

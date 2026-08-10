@@ -10,6 +10,21 @@ _English version available in [README.md](README.md)._
 
 ---
 
+## 🆕 Update — 2026-08-10
+
+本次更新聚焦于 Microsoft/Azure 音色能力、OpenAI 标准协议映射、长文 TTS 稳定性与 Docker/VPS 部署兼容。
+
+- **Microsoft/Azure 音色目录**：导入 Azure 文档中的语言与音色能力，当前可识别 765 个音色；中文和英文优先排序，支持按国家/语言、性别、音色类型、情绪/风格和角色能力筛选。
+- **OpenAI 音色完整预设**：在 WebUI 试听后，可将当前音色、情绪、角色、强度、语速、音调和文本清洗设置直接保存到 `alloy`、`shimmer` 等 OpenAI 标准音色。API 调用方仍只需使用 OpenAI 标准请求。
+- **TTS 文本清洗与语义分块**：清理 Markdown、HTML、URL 和表情时保留小数、百分比、括号语义和段落。长文优先在句子、从句和英文单词边界分割，并合并过短段落，减少多余的 TTS 请求。
+- **更快的 Microsoft TTS 请求**：同一次 API 请求内的所有文本块共用 Microsoft 端点信息与 HTTP 会话，减少额外端点请求和 TLS 握手。流式输出保持音频顺序，同时在后台并发生成后续块。
+- **跨平台 TLS 和 Docker/VPS**：兼容 macOS、Windows 和 Ubuntu 系统证书库，支持私有 CA；Docker 已通过 `linux/arm64` 和 `linux/amd64` 验证，并增加健康检查、敏感文件排除和安全环境变量。
+- **API 文档和测试**：新增 [Edge/OpenAI 扩展 API 文档](docs/EDGE_TTS_API.md)，覆盖情绪、语速、角色、强度、自动选音、流式输出与分块参数。
+
+### 从旧版升级
+
+这一版会自动将旧的 `openai_voice_map` 迁移为新的完整音色预设。使用 Docker 的 VPS 必须在拉取前备份 `config.json`，并在更新后重新构建镜像；完整命令见 [VPS 上更新现有 Docker 部署](#vps-上更新现有-docker-部署)。
+
 ## 🌟 为什么选择 LocalTTS？
 
 我们倾注了大量心血，将 LocalTTS 打造成了一个功能强大且极易使用的服务。它不仅仅是“能用”，更是“好用”和“可靠”。
@@ -39,10 +54,12 @@ _English version available in [README.md](README.md)._
 - **一键 Docker 部署**: 对新手最友好的部署方式，屏蔽所有复杂环境配置。
 - **直观的 WebUI**:
   - **动态配置中心**: 在网页上即可轻松设置端口、并发数、API 密钥。
-  - **强大的文本过滤器**: 一键移除 Markdown、URL、表情符号，或通过简单的关键词列表进行自定义过滤，让您对朗读内容拥有完全的控制权。
+  - **强大的文本过滤器**: 一键移除 Markdown、HTML、URL、表情符号，保留小数、百分数和括号内语义，并智能合并段内软换行、保留自然段落；也可通过关键词列表进行自定义过滤。
     ![高级文本过滤与服务设置](./static/screen/c2.jpg)
     ![OpenAI 音色映射配置](./static/screen/c3.jpg)
 - **双重安全保障**: 可选的 WebUI 登录密码和 API 密钥，确保您的服务在任何网络环境下都安全无虞。
+
+详细的情绪、角色、风格强度、自动选音与 Edge 扩展参数请参阅 [Edge/OpenAI 扩展 API 文档](docs/EDGE_TTS_API.md)。
 
 ## 📖 使用场景
 
@@ -76,6 +93,49 @@ LocalTTS 的可能性是无限的，这里仅列举几例：
 
 4.  **访问与配置**: - 打开浏览器访问 `http://localhost:5050` (或您设置的端口)。 - 登录后，进入**服务设置**，设置您的**API 密钥**并保存。
     ![LocalTTS api 界面](./static/screen/c4.jpg)
+
+### VPS 上更新现有 Docker 部署
+
+`config.json` 通过宿主机绑定挂载持久化，已有 API 密钥、音色映射、完整 OpenAI 音色预设和文本过滤设置不会因重新构建镜像而丢失。旧版映射会在首次启动时自动迁移。
+
+```bash
+cd /path/to/Local-TTS-Service
+
+# config.json 当前是 Git 跟踪文件，先把 VPS 运行配置备份到仓库外
+CONFIG_BACKUP="../local-tts-config-$(date +%Y%m%d-%H%M%S).json"
+cp config.json "$CONFIG_BACKUP"
+
+# 恢复仓库版本后再拉取，避免 WebUI 写入的配置阻塞 git pull
+git restore config.json
+git pull --ff-only
+cp "$CONFIG_BACKUP" config.json
+
+docker compose config --quiet
+docker compose up -d --build --remove-orphans
+docker compose ps
+docker compose logs --tail=100 tts-service
+```
+
+建议在 `.env` 中至少设置：
+
+```dotenv
+TTS_PORT=5050
+WEBUI_PASSWORD=请替换为强密码
+FLASK_SECRET_KEY=请使用-openssl-rand-hex-32-生成的固定值
+```
+
+- `TTS_PORT` 是 VPS 对外端口；容器内部固定使用 `5050`，不会再受 WebUI 端口配置影响。
+- 国内 VPS 如果 Debian 软件源较慢，可以设置 `USE_CHINA_MIRRORS=true` 后重新构建。
+- `config.json` 当前仍由 Git 跟踪，因此 VPS 更新必须按上面流程先备份再恢复；不要直接在有本地配置改动时强行拉取。
+- 不要使用 `docker compose down -v` 清理数据。当前使用绑定挂载，但更新前保留仓库外备份仍是推荐做法。
+- 更新后若健康状态不是 `healthy`，先运行 `docker compose logs --tail=200 tts-service` 检查日志。
+
+### Microsoft TLS 证书兼容性
+
+- macOS、Windows 和 Ubuntu 默认使用各自的系统信任库，不需要关闭 SSL 校验。
+- Ubuntu/VPS 使用标准公网网络时无需额外配置；如服务器经过企业 HTTPS 代理，请把代理根证书安装到系统 CA 后重启服务。
+- 也可以设置 `TTS_CA_BUNDLE` 指向 PEM 格式的 CA 文件。Docker 部署时将证书放入 `./certs/`，并在 `.env` 中使用容器路径，例如 `TTS_CA_BUNDLE=/app/certs/company-ca.pem`。
+- 非流式请求如果所有分块均生成失败，接口会返回 HTTP `502`，不会再把静音文件作为成功结果返回。
 
 ## 🤝 贡献
 

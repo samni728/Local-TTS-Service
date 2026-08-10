@@ -4,7 +4,10 @@ FROM python:3.10-slim-bookworm
 # --- 优化核心：允许在构建时动态指定软件源 ---
 # 参数1: PyPI 镜像源
 ARG PIP_INDEX_URL=https://pypi.org/simple
-ENV PIP_INDEX_URL=${PIP_INDEX_URL}
+ENV PIP_INDEX_URL=${PIP_INDEX_URL} \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    TTS_INTERNAL_PORT=5050
 # 参数2: 是否使用国内的 APT 镜像源
 ARG USE_CHINA_MIRRORS=false
 
@@ -15,7 +18,7 @@ RUN if [ "$USE_CHINA_MIRRORS" = "true" ] ; then \
         sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list.d/debian.sources ; \
     fi && \
     apt-get update && \
-    apt-get install -y ffmpeg --no-install-recommends && \
+    apt-get install -y ffmpeg ca-certificates --no-install-recommends && \
     rm -rf /var/lib/apt/lists/*
 
 # 设置容器内的工作目录
@@ -32,6 +35,9 @@ COPY . .
 
 # 声明容器将要监听的端口
 EXPOSE 5050
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5050/login', timeout=3)"]
 
 # 容器启动时要执行的命令
 CMD ["python", "app.py"]

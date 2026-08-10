@@ -10,24 +10,42 @@ import hmac
 import base64
 import uuid
 from io import BytesIO
-from collections import defaultdict
 from functools import wraps
 import subprocess
 import tempfile
 import threading
+from html import escape as html_escape
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
+from tls_config import (
+    certificate_error_message,
+    configure_tls_trust,
+    is_certificate_verification_error,
+)
+
+TLS_TRUST_SOURCE = configure_tls_trust()
 
 import edge_tts
 import aiohttp
 import urllib.parse
 from flask import Flask, request, jsonify, render_template, send_file, session, redirect, url_for, Response
 from flask_cors import CORS
-from dotenv import load_dotenv
-import emoji
+
+from text_processing import pre_process_text, split_text_into_chunks
+from voice_catalog import (
+    build_voice_catalog,
+    catalog_metadata,
+    filter_voices,
+    normalize_gender,
+)
 
 # --- 配置和初始化 ---
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] [%(levelname)s] - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 logger = logging.getLogger(__name__)
-load_dotenv()
+logger.info("TLS trust source: %s", TLS_TRUST_SOURCE)
 
 # Microsoft Edge TTS API 配置
 MICROSOFT_TTS_KEY = "oik6PdDdMnOXemTbwvMn9de/h9lFnfBaCWbGMMZqqoSaQaqUOqjVGm5NqsmjcBI1x+sS9ugjB55HEJWRiFXYFw=="
@@ -56,12 +74,16 @@ app.secret_key = os.environ.get('FLASK_SECRET_KEY', secrets.token_hex(24))
 CONFIG_FILE = 'config.json'
 VOICES_LIST_FILE = os.path.join('tts_data', 'voices_list.txt')
 LOCALES_MAP_FILE = os.path.join('tts_data', 'locales_map.json')
+AZURE_VOICE_DOC_FILE = os.path.join('docs', 'Azure语音的语言和语音支持 - Foundry Tools - Microsoft Learn.md')
 config = {}
 ALL_VOICES = []
+VOICE_INDEX = {}
 SUPPORTED_LOCALES = {}
-MAX_CONCURRENT_REQUESTS = 20
+MAX_CONCURRENT_REQUESTS = 8
 CHUNK_SIZE = 300
 SYNC_CHUNKS = 1
+OPENAI_VOICE_ALIASES = ("shimmer", "alloy", "fable", "onyx", "nova", "echo")
+MICROSOFT_HTTP_TIMEOUT = aiohttp.ClientTimeout(total=45, connect=10, sock_read=40)
 
 # Global event loop for streaming tasks
 STREAM_LOOP = asyncio.new_event_loop()
@@ -118,9 +140,29 @@ async def generate_streaming_audio_async(
     )
     buffers = [None] * (total_chunks + 1)
     results = [None] * (total_chunks + 1)
+    ready_events = [None] + [asyncio.Event() for _ in range(total_chunks)]
     start_time = time.time()
+    endpoint_task = None
+    endpoint_lock = asyncio.Lock()
     # Number of chunks handled sequentially before switching to concurrency
     SYNC_CHUNKS = max(sync_chunks, 0)
+
+    async def microsoft_tts(ssml_text: str) -> bytes:
+        """Share one endpoint lookup across all streaming chunks in this request."""
+
+        nonlocal endpoint_task
+        async with endpoint_lock:
+            if endpoint_task is None:
+                endpoint_task = asyncio.create_task(get_microsoft_endpoint())
+            current_task = endpoint_task
+        try:
+            endpoint = await current_task
+        except Exception:
+            async with endpoint_lock:
+                if endpoint_task is current_task:
+                    endpoint_task = None
+            raise
+        return await tts_with_microsoft_api(ssml_text, voice, endpoint=endpoint)
 
     async def process_chunk(idx: int, text: str):
         """Process a single text chunk with retry and concurrency control."""
@@ -142,27 +184,30 @@ async def generate_streaming_audio_async(
                     
                     buf = bytearray()
                     
-                    # 首先尝试使用 edge_tts 库
-                    try:
-                        # 使用edge_tts的原生参数，不构建SSML
-                        communicate = edge_tts.Communicate(text, voice, rate=rate_percent, pitch=pitch_percent)
-                        async for chunk_data in communicate.stream():
-                            if chunk_data["type"] == "audio":
-                                buf.extend(chunk_data["data"])
-                    except Exception as edge_error:
-                        logger.warning(f"  [Task {idx}] edge_tts 库失败: {edge_error}")
-                        logger.info(f"  [Task {idx}] 尝试使用 Microsoft API...")
-                        
-                        # 如果 edge_tts 失败，使用 Microsoft API 作为备选方案
+                    expressive_request = (voice_style and voice_style != "general") or voice_role
+                    if expressive_request:
+                        ssml_text = generate_ssml(
+                            text, voice, voice_style, voice_role, style_degree, speed, pitch
+                        )
+                        audio_data = await microsoft_tts(ssml_text)
+                        buf.extend(audio_data)
+                    else:
                         try:
-                            # 为Microsoft API生成SSML
-                            ssml_text = generate_ssml(text, voice, voice_style, voice_role, style_degree, speed, pitch)
-                            audio_data = await tts_with_microsoft_api(ssml_text, voice)
+                            communicate = edge_tts.Communicate(
+                                text, voice, rate=rate_percent, pitch=pitch_percent
+                            )
+                            async for chunk_data in communicate.stream():
+                                if chunk_data["type"] == "audio":
+                                    buf.extend(chunk_data["data"])
+                        except Exception as edge_error:
+                            logger.warning(f"  [Task {idx}] edge_tts 库失败: {edge_error}")
+                            logger.info(f"  [Task {idx}] 尝试使用 Microsoft API...")
+                            ssml_text = generate_ssml(
+                                text, voice, voice_style, voice_role, style_degree, speed, pitch
+                            )
+                            audio_data = await microsoft_tts(ssml_text)
                             buf.extend(audio_data)
                             logger.info(f"  [Task {idx}] Microsoft API 成功生成音频")
-                        except Exception as ms_error:
-                            logger.error(f"  [Task {idx}] Microsoft API 也失败: {ms_error}")
-                            raise ms_error
                 if buf:
                     elapsed_time = time.time() - chunk_start
                     logger.info(
@@ -173,6 +218,7 @@ async def generate_streaming_audio_async(
                     )
                     buffers[idx] = bytes(buf)
                     results[idx] = (True, attempt + 1, elapsed_time)
+                    ready_events[idx].set()
                     break
                 else:
                     raise edge_tts.NoAudioReceived("No audio was received (empty data).")
@@ -188,33 +234,41 @@ async def generate_streaming_audio_async(
                     )
                     buffers[idx] = await generate_silence_bytes()
                     results[idx] = (False, attempt + 1, elapsed_time)
+                    ready_events[idx].set()
                     break
                 wait_time = min(2 ** attempt, 8)
                 logger.info(f"  [Task {idx}] Retrying after {wait_time:.2f}s...")
                 await asyncio.sleep(wait_time)
 
-    # --- Step 1: process the first few chunks synchronously ---
-    for idx, chunk in enumerate(text_chunks[:SYNC_CHUNKS], start=1):
-        await process_chunk(idx, chunk)
-        if buffers[idx] is not None:
-            logger.info(f"Streaming chunk {idx}/{total_chunks} sent")
-            yield buffers[idx]
-
-    # --- Step 2: launch concurrent tasks for the remaining chunks ---
-    tasks = [
-        asyncio.create_task(process_chunk(i, chunk))
-        for i, chunk in enumerate(text_chunks[SYNC_CHUNKS:], start=SYNC_CHUNKS + 1)
-    ]
-
+    tasks = []
     next_idx = SYNC_CHUNKS + 1
     try:
+        # Generate the warm-up chunks in order. Start the remaining work before
+        # yielding the final warm-up chunk so playback and synthesis overlap.
+        for idx, chunk in enumerate(text_chunks[:SYNC_CHUNKS], start=1):
+            await process_chunk(idx, chunk)
+            if idx == min(SYNC_CHUNKS, total_chunks):
+                tasks = [
+                    asyncio.create_task(process_chunk(i, remaining_chunk))
+                    for i, remaining_chunk in enumerate(
+                        text_chunks[SYNC_CHUNKS:], start=SYNC_CHUNKS + 1
+                    )
+                ]
+            if buffers[idx] is not None:
+                logger.info(f"Streaming chunk {idx}/{total_chunks} sent")
+                yield buffers[idx]
+
+        if not tasks and SYNC_CHUNKS == 0:
+            tasks = [
+                asyncio.create_task(process_chunk(i, chunk))
+                for i, chunk in enumerate(text_chunks, start=1)
+            ]
+
         while next_idx <= total_chunks:
-            if buffers[next_idx] is not None:
-                logger.info(f"Streaming chunk {next_idx}/{total_chunks} sent")
-                yield buffers[next_idx]
-                next_idx += 1
-            else:
-                await asyncio.sleep(0.05)
+            await ready_events[next_idx].wait()
+            logger.info(f"Streaming chunk {next_idx}/{total_chunks} sent")
+            yield buffers[next_idx]
+            next_idx += 1
     finally:
         await asyncio.gather(*tasks, return_exceptions=True)
         total_time = time.time() - start_time
@@ -278,7 +332,7 @@ def initialize_config():
     default_config = {
         "port": 5050,
         "api_token": "",
-        "max_concurrent_requests": 20,
+        "max_concurrent_requests": 8,
         "chunk_size": 300,
         "sync_chunks": 1,
         "sync_api_filtering": True,
@@ -287,6 +341,7 @@ def initialize_config():
             "no_urls": True, "no_line_breaks": False, "custom_keywords": ""
         },
         "openai_voice_map": { "shimmer": "zh-CN-XiaoxiaoNeural", "alloy": "en-US-AriaNeural", "fable": "zh-CN-shaanxi-XiaoniNeural", "onyx": "en-US-ChristopherNeural", "nova": "en-US-AvaNeural", "echo": "zh-CN-YunyangNeural" },
+        "openai_voice_presets": {},
         "custom_voices": {},
         "edge_user_id": "",
         "edge_client_trace_id": ""
@@ -304,6 +359,17 @@ def initialize_config():
                 updated = True
         config = loaded_config
         if updated: save_config_to_file(config)
+    presets = config.get("openai_voice_presets")
+    if not isinstance(presets, dict):
+        presets = {}
+        config["openai_voice_presets"] = presets
+    migrated_presets = False
+    for alias, voice_name in config.get("openai_voice_map", {}).items():
+        if alias not in presets and isinstance(voice_name, str) and voice_name:
+            presets[alias] = {"voice": voice_name}
+            migrated_presets = True
+    if migrated_presets:
+        save_config_to_file(config)
     # 设备 ID 与追踪 ID：若为空则生成一次并持久化
     if not config.get("edge_user_id"):
         config["edge_user_id"] = uuid.uuid4().hex[:16]
@@ -313,7 +379,7 @@ def initialize_config():
         config["edge_client_trace_id"] = uuid.uuid4().hex
         save_config_to_file(config)
         logger.info("Generated persistent edge_client_trace_id (will be reused across requests)")
-    MAX_CONCURRENT_REQUESTS = config.get("max_concurrent_requests", 20)
+    MAX_CONCURRENT_REQUESTS = config.get("max_concurrent_requests", 8)
     CHUNK_SIZE = config.get("chunk_size", 300)
     SYNC_CHUNKS = config.get("sync_chunks", 1)
     logger.info(
@@ -321,7 +387,7 @@ def initialize_config():
     )
 
 def parse_voices():
-    global ALL_VOICES, SUPPORTED_LOCALES
+    global ALL_VOICES, VOICE_INDEX, SUPPORTED_LOCALES
     try:
         with open(VOICES_LIST_FILE, 'r', encoding='utf-8') as f: voices_raw_data = f.read()
         with open(LOCALES_MAP_FILE, 'r', encoding='utf-8') as f: locale_display_names = json.load(f)
@@ -329,24 +395,29 @@ def parse_voices():
         logger.error(f"Data file not found: {e}.")
         return
 
-    lines = voices_raw_data.strip().split('\n')
-    locales_with_voices = defaultdict(list)
-    for line in lines[2:]:
-        parts = line.split()
-        if len(parts) < 2: continue
-        name = parts[0]
-        try:
-            locale_parts = name.split('-')
-            locale = f"{locale_parts[0]}-{locale_parts[1]}"
-            voice_data = {"name": name, "gender": parts[1], "locale": locale, "short_name": '-'.join(locale_parts[2:])}
-            ALL_VOICES.append(voice_data)
-            locales_with_voices[locale].append(voice_data)
-        except IndexError: logger.warning(f"Could not parse voice line: {line}")
-    
-    sorted_locales = sorted(locales_with_voices.keys(), key=lambda x: (x not in ['zh-CN', 'en-US'], locale_display_names.get(x, x)))
-    for locale in sorted_locales:
-        display_name = locale_display_names.get(locale, locale)
-        SUPPORTED_LOCALES[locale] = display_name
+    try:
+        with open(AZURE_VOICE_DOC_FILE, 'r', encoding='utf-8') as f:
+            azure_document_text = f.read()
+    except FileNotFoundError:
+        azure_document_text = ""
+        logger.warning("Azure voice capability document not found; using Edge voice list only.")
+
+    ALL_VOICES = build_voice_catalog(
+        voices_raw_data,
+        locale_display_names,
+        azure_document_text,
+    )
+    VOICE_INDEX = {voice["name"]: voice for voice in ALL_VOICES}
+    SUPPORTED_LOCALES = {}
+    for voice in ALL_VOICES:
+        SUPPORTED_LOCALES.setdefault(voice["locale"], voice["locale_name"])
+    metadata = catalog_metadata(ALL_VOICES)
+    logger.info(
+        "Voice catalog loaded: %s total, %s Edge-listed, %s Azure-documented.",
+        metadata["total"],
+        metadata["edge_available"],
+        metadata["azure_documented"],
+    )
 
 # --- 认证装饰器 ---
 def token_required(f):
@@ -371,111 +442,189 @@ def login_required(f):
     return decorated_function
 
 # --- 核心业务逻辑 ---
-def pre_process_text(text, options):
-    logger.info(f"Applying text cleaning with options: {options}")
-    processed_text = text
-    if options.get('remove_markdown'):
-        processed_text = re.sub(r'\[!\[([^\]]*)\]\([^\)]+\)\]\([^\)]+\)', r'\1', processed_text)
-        processed_text = re.sub(r'!\[([^\]]*)\]\([^\)]+\)', r'\1', processed_text)
-        processed_text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', processed_text)
-        processed_text = re.sub(r'```[\s\S]*?```', '', processed_text)
-        processed_text = re.sub(r'`([^`]+)`', r'\1', processed_text)
-        processed_text = re.sub(r'(\*\*|__)(.*?)\1', r'\2', processed_text)
-        processed_text = re.sub(r'(\*|_)(.*?)\1', r'\2', processed_text)
-        processed_text = re.sub(r'^\s*#+\s*', '', processed_text, flags=re.MULTILINE)
-        processed_text = re.sub(r'^\s*[\*\-]\s*|\s*\d+\.\s*', '', processed_text, flags=re.MULTILINE)
-        processed_text = re.sub(r'^\s*>\s?', '', processed_text, flags=re.MULTILINE)
-        processed_text = re.sub(r'^\s*[-*_]{3,}\s*$', '', processed_text, flags=re.MULTILINE)
-    if options.get('remove_emoji'):
-        processed_text = emoji.replace_emoji(processed_text, replace='')
-    if options.get('no_urls'):
-        processed_text = re.sub(r'http\S+|www\S+|https\S+', '', processed_text, flags=re.MULTILINE)
-    custom_keywords_str = options.get('custom_keywords', '')
-    if custom_keywords_str:
-        keywords = [re.escape(k.strip()) for k in custom_keywords_str.split(',') if k.strip()]
-        if keywords:
-            regex_pattern = '|'.join(keywords)
-            processed_text = re.sub(regex_pattern, '', processed_text)
-    if not options.get('no_line_breaks'):
-        lines = processed_text.split('\n')
-        reunited_lines = []
-        for i, line in enumerate(lines):
-            line = line.strip()
-            if not line: continue
-            if reunited_lines and not reunited_lines[-1].strip().endswith(('。', '？', '！', '?', '!')):
-                reunited_lines[-1] += ' ' + line
-            else:
-                reunited_lines.append(line)
-        processed_text = '\n'.join(reunited_lines)
-    else:
-        processed_text = processed_text.replace('\n', ' ')
-    processed_text = processed_text.replace('\t', ' ')
-    # Remove spaces inserted between Chinese characters due to PDF line breaks
-    processed_text = re.sub(r'(?<=[\u4e00-\u9fff])\s+(?=[\u4e00-\u9fff])', '', processed_text)
-    # Remove spaces around common Chinese punctuation
-    processed_text = re.sub(r'\s+([，。、？！；：])', r'\1', processed_text)
-    processed_text = re.sub(r'([，。、？！；：])\s+', r'\1', processed_text)
-    processed_text = re.sub(r'([（《「『])\s+', r'\1', processed_text)
-    processed_text = re.sub(r'\s+([）》」』])', r'\1', processed_text)
-    processed_text = re.sub(r' +', ' ', processed_text)
-    return processed_text.strip()
+def _parse_bounded_float(data, keys, default, minimum, maximum):
+    raw_value = next((data[key] for key in keys if key in data), default)
+    try:
+        value = float(raw_value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"'{keys[0]}' must be a number.") from exc
+    if not minimum <= value <= maximum:
+        raise ValueError(f"'{keys[0]}' must be between {minimum} and {maximum}.")
+    return value
 
-def split_text_intelligently(text, options, target_size=800, max_size=1500):
-    processed_text = pre_process_text(text, options)
-    sentences = re.split(r'((?<![0-9\uff10-\uff19])\.(?![0-9\uff10-\uff19])|[？！?!\n])', processed_text)
-    rough_chunks = []
-    for i in range(0, len(sentences) - 1, 2):
-        chunk = sentences[i] + (sentences[i+1] if sentences[i+1] else '')
-        if chunk.strip(): rough_chunks.append(chunk.strip())
-    if len(sentences) % 2 != 0 and sentences[-1].strip():
-        rough_chunks.append(sentences[-1].strip())
-    if not rough_chunks: return [processed_text] if processed_text.strip() else []
-    final_chunks = []
-    current_chunk = ""
-    for chunk in rough_chunks:
-        is_paragraph_break = '\n' in chunk
-        chunk_to_add = chunk.replace('\n', ' ').strip()
-        if not chunk_to_add: continue
-        if current_chunk and (len(current_chunk) + len(chunk_to_add) > max_size or (is_paragraph_break and len(current_chunk) > target_size)):
-            final_chunks.append(current_chunk)
-            current_chunk = chunk_to_add
-        else:
-            current_chunk = (current_chunk + " " + chunk_to_add) if current_chunk else chunk_to_add
-    if current_chunk:
-        final_chunks.append(current_chunk)
-    logger.info(f"Intelligently split text into {len(final_chunks)} high-quality chunks.")
-    return final_chunks
 
-# 新的文本分块函数，优先按标点断句，并确保每块不超过 max_chunk_len
+def _parse_bounded_int(raw_value, name, default, minimum, maximum):
+    if raw_value is None:
+        raw_value = default
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"'{name}' must be an integer.") from exc
+    if not minimum <= value <= maximum:
+        raise ValueError(f"'{name}' must be between {minimum} and {maximum}.")
+    return value
+
+
+def _get_openai_voice_preset(alias):
+    if alias not in OPENAI_VOICE_ALIASES:
+        return None
+    raw_preset = config.get("openai_voice_presets", {}).get(alias)
+    preset = dict(raw_preset) if isinstance(raw_preset, dict) else {}
+    legacy_voice = config.get("openai_voice_map", {}).get(alias)
+    if legacy_voice and not preset.get("voice"):
+        preset["voice"] = legacy_voice
+    return preset or None
+
+
+def _preset_value(data, preset, keys, default, authoritative=False):
+    """Resolve a setting from a saved preset and request data.
+
+    Complete presets are authoritative by default so OpenAI SDKs that always
+    send ``speed=1`` do not accidentally erase the WebUI setting. Advanced
+    callers can opt in to request-side overrides with ``override_preset``.
+    """
+
+    if preset and authoritative and not data.get("override_preset", False):
+        for key in keys:
+            if key in preset:
+                return preset[key]
+    for key in keys:
+        if key in data:
+            return data[key]
+    if preset:
+        for key in keys:
+            if key in preset:
+                return preset[key]
+    return default
+
+
+def _resolve_voice(data, style="", role="", preset=None):
+    requested_voice = data.get("voice")
+    mapped_voice = (preset or {}).get("voice") or config.get('openai_voice_map', {}).get(requested_voice, requested_voice)
+    requested_gender = data.get("gender")
+    strict = bool(data.get("strict_capabilities", False))
+
+    if not mapped_voice or mapped_voice == "auto":
+        locale = data.get("locale")
+        if not locale:
+            raise ValueError("'locale' is required when voice is 'auto'.")
+        candidates = filter_voices(
+            ALL_VOICES,
+            locale=locale,
+            gender=requested_gender,
+            style=style or None,
+            role=role or None,
+            voice_type=data.get("voice_type"),
+            edge_available=bool(data.get("edge_available_only", False)),
+        )
+        if not candidates:
+            raise ValueError("No voice matches the requested locale and capabilities.")
+        mapped_voice = next(
+            (voice["name"] for voice in candidates if voice["edge_available"]),
+            candidates[0]["name"],
+        )
+
+    voice_info = VOICE_INDEX.get(mapped_voice)
+    if strict and voice_info:
+        if requested_gender and voice_info["gender"] != normalize_gender(requested_gender):
+            raise ValueError(
+                f"Voice '{mapped_voice}' has gender {voice_info['gender']}, not {normalize_gender(requested_gender)}."
+            )
+        if style and style not in voice_info["styles"]:
+            supported = ", ".join(voice_info["styles"]) or "none"
+            raise ValueError(f"Voice '{mapped_voice}' does not support style '{style}'. Supported: {supported}.")
+        if role and role not in voice_info["roles"]:
+            supported = ", ".join(voice_info["roles"]) or "none"
+            raise ValueError(f"Voice '{mapped_voice}' does not support role '{role}'. Supported: {supported}.")
+    return mapped_voice, voice_info
+
+
+def _validate_and_build_openai_preset(data):
+    voice_name = str(data.get("voice", "")).strip()
+    if not voice_name:
+        raise ValueError("'voice' is required.")
+
+    style = str(data.get("style") or "general")
+    role = str(data.get("role") or "")
+    voice_info = VOICE_INDEX.get(voice_name)
+    is_custom_voice = voice_name in config.get("custom_voices", {})
+    if not voice_info and not is_custom_voice:
+        raise ValueError(f"Voice '{voice_name}' was not found.")
+    if voice_info:
+        if style != "general" and style not in voice_info.get("styles", []):
+            raise ValueError(f"Voice '{voice_name}' does not support style '{style}'.")
+        if role and role not in voice_info.get("roles", []):
+            raise ValueError(f"Voice '{voice_name}' does not support role '{role}'.")
+
+    cleaning_options = data.get("cleaning_options", {})
+    if not isinstance(cleaning_options, dict):
+        raise ValueError("'cleaning_options' must be an object.")
+    allowed_cleaning_keys = {
+        "remove_markdown",
+        "remove_emoji",
+        "no_urls",
+        "no_line_breaks",
+        "custom_keywords",
+    }
+    cleaning_snapshot = {
+        key: cleaning_options[key]
+        for key in allowed_cleaning_keys
+        if key in cleaning_options
+    }
+
+    return {
+        "voice": voice_name,
+        "style": style,
+        "role": role,
+        "style_degree": _parse_bounded_float(data, ("style_degree",), 1.0, 0.01, 2.0),
+        "speed": _parse_bounded_float(data, ("speed",), 1.0, 0.25, 4.0),
+        "pitch": _parse_bounded_float(data, ("pitch",), 1.0, 0.5, 1.5),
+        "cleaning_options": cleaning_snapshot,
+        "strict_capabilities": bool(voice_info),
+        "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+
+
 def generate_ssml(text, voice, style="general", role="", style_degree=1.0, speed=1.0, pitch=1.0):
-    """生成包含自定义语音参数的 SSML 内容"""
-    # 转义特殊字符
-    escaped_text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    
-    # 计算速度和音调的百分比值
-    rate_percent = int((speed - 1) * 100)
-    pitch_percent = int((pitch - 1) * 100)
-    
-    # 基础 SSML 结构，包含语速和音调
-    ssml_content = f'<prosody rate="{rate_percent}%" pitch="{pitch_percent}%">{escaped_text}</prosody>'
-    
-    # 添加语音风格
+    """Generate Microsoft-compatible SSML for prosody, style, and role."""
+    paragraphs = [part.strip() for part in re.split(r"\n{2,}", text) if part.strip()]
+    escaped_text = '<break time="320ms"/>'.join(
+        html_escape(paragraph, quote=False) for paragraph in paragraphs
+    )
+    escaped_voice = html_escape(voice, quote=True)
+    voice_info = VOICE_INDEX.get(voice, {})
+    xml_lang = voice_info.get("locale") or "-".join(voice.split("-")[:2])
+
+    rate_percent = round((speed - 1) * 100)
+    pitch_percent = round((pitch - 1) * 100)
+    ssml_content = (
+        f'<prosody rate="{rate_percent:+d}%" pitch="{pitch_percent:+d}%">'
+        f'{escaped_text}</prosody>'
+    )
+
+    express_attributes = []
     if style and style != "general":
-        style_attributes = f' styledegree="{style_degree}"' if style_degree != 1.0 else ""
-        ssml_content = f'<mstts:express-as style="{style}"{style_attributes}>{ssml_content}</mstts:express-as>'
-    
-    # 添加角色扮演
+        express_attributes.append(f'style="{html_escape(style, quote=True)}"')
+        express_attributes.append(f'styledegree="{style_degree:.2f}"')
     if role:
-        ssml_content = f'<mstts:express-as role="{role}">{ssml_content}</mstts:express-as>'
-    
-    # 完整的 SSML 文档，包含 voice 标签
-    ssml = f'''<speak xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="http://www.w3.org/2001/mstts" version="1.0" xml:lang="zh-CN"><voice name="{voice}">{ssml_content}</voice></speak>'''
-    
-    return ssml
+        express_attributes.append(f'role="{html_escape(role, quote=True)}"')
+    if express_attributes:
+        ssml_content = (
+            f'<mstts:express-as {" ".join(express_attributes)}>'
+            f'{ssml_content}</mstts:express-as>'
+        )
+
+    return (
+        '<speak xmlns="http://www.w3.org/2001/10/synthesis" '
+        'xmlns:mstts="http://www.w3.org/2001/mstts" version="1.0" '
+        f'xml:lang="{html_escape(xml_lang, quote=True)}">'
+        f'<voice name="{escaped_voice}">{ssml_content}</voice></speak>'
+    )
 
 # Microsoft Edge TTS API 辅助函数
-async def get_microsoft_endpoint():
+async def get_microsoft_endpoint(client_session: aiohttp.ClientSession | None = None):
     """获取 Microsoft Edge TTS 端点信息"""
+    owned_session = None
     try:
         # 首先调用 Microsoft Translator 端点获取真实的端点信息
         endpoint_url = "https://dev.microsofttranslator.com/apps/endpoint?api-version=1.0"
@@ -492,6 +641,10 @@ async def get_microsoft_endpoint():
             {"lang": "en-US", "region": "en-US", "ver": "4.0.531a 5fe1dc6c"},
         ]
         
+        if client_session is None:
+            owned_session = aiohttp.ClientSession(timeout=MICROSOFT_HTTP_TIMEOUT)
+            client_session = owned_session
+
         last_error = None
         for attempt in range(5):
             try:
@@ -509,15 +662,16 @@ async def get_microsoft_endpoint():
                     "Accept-Encoding": "gzip",
                 }
                 
-                async with aiohttp.ClientSession() as session:
-                    async with session.post(endpoint_url, headers=headers) as response:
-                        if not response.ok:
-                            raise Exception(f"HTTP {response.status}: {response.reason}")
-                        
-                        data = await response.json()
-                        return {"r": data["r"], "t": data["t"], "url": f"https://{data['r']}.tts.speech.microsoft.com/cognitiveservices/v1"}
+                async with client_session.post(endpoint_url, headers=headers) as response:
+                    if not response.ok:
+                        raise Exception(f"HTTP {response.status}: {response.reason}")
+
+                    data = await response.json()
+                    return {"r": data["r"], "t": data["t"], "url": f"https://{data['r']}.tts.speech.microsoft.com/cognitiveservices/v1"}
                         
             except Exception as e:
+                if is_certificate_verification_error(e):
+                    raise RuntimeError(certificate_error_message(e)) from e
                 last_error = e
                 logger.warning(f"端点获取尝试 {attempt + 1} 失败: {e}")
                 if attempt < 4:
@@ -529,6 +683,9 @@ async def get_microsoft_endpoint():
     except Exception as e:
         logger.error(f"获取 Microsoft 端点失败: {e}")
         raise
+    finally:
+        if owned_session is not None:
+            await owned_session.close()
 
 async def generate_microsoft_token(url_str):
     """生成 Microsoft Edge TTS 认证令牌"""
@@ -553,10 +710,21 @@ async def generate_microsoft_token(url_str):
         logger.error(f"生成 Microsoft 令牌失败: {e}")
         raise
 
-async def tts_with_microsoft_api(ssml_text, voice, output_format="audio-24khz-48kbitrate-mono-mp3"):
+async def tts_with_microsoft_api(
+    ssml_text,
+    voice,
+    output_format="audio-24khz-48kbitrate-mono-mp3",
+    endpoint=None,
+    client_session: aiohttp.ClientSession | None = None,
+):
     """使用 Microsoft Edge TTS API 直接生成音频"""
+    owned_session = None
     try:
-        endpoint = await get_microsoft_endpoint()
+        if client_session is None:
+            owned_session = aiohttp.ClientSession(timeout=MICROSOFT_HTTP_TIMEOUT)
+            client_session = owned_session
+        if endpoint is None:
+            endpoint = await get_microsoft_endpoint(client_session)
         
         headers = {
             "Authorization": endpoint["t"],
@@ -565,58 +733,19 @@ async def tts_with_microsoft_api(ssml_text, voice, output_format="audio-24khz-48
             "X-Microsoft-OutputFormat": output_format,
         }
         
-        async with aiohttp.ClientSession() as session:
-            async with session.post(endpoint["url"], headers=headers, data=ssml_text) as response:
-                if not response.ok:
-                    error_text = await response.text()
-                    raise Exception(f"Microsoft TTS API error: {response.status} {error_text}")
-                
-                return await response.read()
+        async with client_session.post(endpoint["url"], headers=headers, data=ssml_text) as response:
+            if not response.ok:
+                error_text = await response.text()
+                raise Exception(f"Microsoft TTS API error: {response.status} {error_text}")
+
+            return await response.read()
                 
     except Exception as e:
         logger.error(f"Microsoft TTS API 调用失败: {e}")
         raise
-
-def split_text_into_chunks(text, max_chunk_len=300):
-    """智能文本分块，针对长文本优化"""
-    text_length = len(text)
-
-    # 尊重用户设定：不再因“长文本”自动调整分块大小
-    # 仅记录日志，说明使用的分块大小
-    logger.info(f"文本长度 {text_length} 字符，使用用户设定的分块大小 {max_chunk_len}")
-
-    sentences = re.split(r'(?<=[。！？!?.])(?!(\d)|$)', text)
-    sentences = [s.strip() for s in sentences if isinstance(s, str) and s.strip()]
-
-    chunks = []
-    current_chunk = ""
-
-    for sentence in sentences:
-        if len(current_chunk) + len(sentence) <= max_chunk_len:
-            current_chunk += sentence
-        else:
-            if current_chunk:
-                chunks.append(current_chunk)
-            if len(sentence) > max_chunk_len:
-                # 对于超长句子，按标点符号进一步分割
-                sub_sentences = re.split(r'(?<=[，,；;])', sentence)
-                temp_chunk = ""
-                for sub in sub_sentences:
-                    if len(temp_chunk) + len(sub) <= max_chunk_len:
-                        temp_chunk += sub
-                    else:
-                        if temp_chunk:
-                            chunks.append(temp_chunk)
-                        temp_chunk = sub
-                current_chunk = temp_chunk
-            else:
-                current_chunk = sentence
-    
-    if current_chunk:
-        chunks.append(current_chunk)
-    
-    logger.info(f"文本分块完成：{text_length} 字符 -> {len(chunks)} 个块 (平均 {text_length//len(chunks) if chunks else 0} 字符/块)")
-    return chunks
+    finally:
+        if owned_session is not None:
+            await owned_session.close()
 
 async def text_to_speech_with_retry(semaphore, chunk_index, text_chunk, voice, temp_dir, voice_style="general", voice_role="", style_degree=1.0, speed=1.0, pitch=1.0):
     task_start_time = time.time()
@@ -636,29 +765,33 @@ async def text_to_speech_with_retry(semaphore, chunk_index, text_chunk, voice, t
                 
                 temp_file_path = os.path.join(temp_dir, f"segment_{chunk_index}.mp3")
                 
-                # 首先尝试使用 edge_tts 库
-                try:
-                    # 使用edge_tts的原生参数，不构建SSML
-                    communicate = edge_tts.Communicate(text_chunk, voice, rate=rate_percent, pitch=pitch_percent)
+                expressive_request = (voice_style and voice_style != "general") or voice_role
+                if expressive_request:
+                    ssml_text = generate_ssml(
+                        text_chunk, voice, voice_style, voice_role, style_degree, speed, pitch
+                    )
+                    audio_data = await tts_with_microsoft_api(ssml_text, voice)
                     with open(temp_file_path, "wb") as temp_file:
-                        async for chunk in communicate.stream():
-                            if chunk["type"] == "audio":
-                                temp_file.write(chunk["data"])
-                except Exception as edge_error:
-                    logger.warning(f"  [Task {chunk_index+1}] edge_tts 库失败: {edge_error}")
-                    logger.info(f"  [Task {chunk_index+1}] 尝试使用 Microsoft API...")
-                    
-                    # 如果 edge_tts 失败，使用 Microsoft API 作为备选方案
+                        temp_file.write(audio_data)
+                else:
                     try:
-                        # 为Microsoft API生成SSML
-                        ssml_text = generate_ssml(text_chunk, voice, voice_style, voice_role, style_degree, speed, pitch)
+                        communicate = edge_tts.Communicate(
+                            text_chunk, voice, rate=rate_percent, pitch=pitch_percent
+                        )
+                        with open(temp_file_path, "wb") as temp_file:
+                            async for chunk in communicate.stream():
+                                if chunk["type"] == "audio":
+                                    temp_file.write(chunk["data"])
+                    except Exception as edge_error:
+                        logger.warning(f"  [Task {chunk_index+1}] edge_tts 库失败: {edge_error}")
+                        logger.info(f"  [Task {chunk_index+1}] 尝试使用 Microsoft API...")
+                        ssml_text = generate_ssml(
+                            text_chunk, voice, voice_style, voice_role, style_degree, speed, pitch
+                        )
                         audio_data = await tts_with_microsoft_api(ssml_text, voice)
                         with open(temp_file_path, "wb") as temp_file:
                             temp_file.write(audio_data)
                         logger.info(f"  [Task {chunk_index+1}] Microsoft API 成功生成音频")
-                    except Exception as ms_error:
-                        logger.error(f"  [Task {chunk_index+1}] Microsoft API 也失败: {ms_error}")
-                        raise ms_error
             if os.path.getsize(temp_file_path) > 0:
                 elapsed_time = time.time() - task_start_time
                 logger.info(
@@ -711,7 +844,20 @@ async def run_tts(
     logger.info(f"Total retry attempts across all tasks: {total_attempts}")
     return [r[0] if r else None for r in results]
 
-async def text_to_speech_official_first(semaphore, chunk_index, text_chunk, voice, temp_dir, voice_style="general", voice_role="", style_degree=1.0, speed=1.0, pitch=1.0):
+async def text_to_speech_official_first(
+    semaphore,
+    chunk_index,
+    text_chunk,
+    voice,
+    temp_dir,
+    voice_style="general",
+    voice_role="",
+    style_degree=1.0,
+    speed=1.0,
+    pitch=1.0,
+    endpoint=None,
+    client_session=None,
+):
     task_start_time = time.time()
     max_retries = 5
     logger.info(f"  [Official/Task {chunk_index+1}] Starting processing for chunk: '{text_chunk[:30]}...'")
@@ -724,7 +870,12 @@ async def text_to_speech_official_first(semaphore, chunk_index, text_chunk, voic
                 logger.info(f"  [Official/Task {chunk_index+1}] Acquired semaphore. Starting Microsoft API request...")
                 temp_file_path = os.path.join(temp_dir, f"segment_{chunk_index}.mp3")
                 ssml_text = generate_ssml(text_chunk, voice, voice_style, voice_role, style_degree, speed, pitch)
-                audio_data = await tts_with_microsoft_api(ssml_text, voice)
+                audio_data = await tts_with_microsoft_api(
+                    ssml_text,
+                    voice,
+                    endpoint=endpoint,
+                    client_session=client_session,
+                )
                 with open(temp_file_path, "wb") as temp_file:
                     temp_file.write(audio_data)
             if os.path.getsize(temp_file_path) > 0:
@@ -766,8 +917,26 @@ async def run_tts_official_first(
     )
     semaphore = asyncio.Semaphore(limit)
     start_time = time.time()
-    tasks = [text_to_speech_official_first(semaphore, i, chunk, voice, temp_dir, voice_style, voice_role, style_degree, speed, pitch) for i, chunk in enumerate(text_chunks)]
-    results = await asyncio.gather(*tasks)
+    async with aiohttp.ClientSession(timeout=MICROSOFT_HTTP_TIMEOUT) as client_session:
+        endpoint = await get_microsoft_endpoint(client_session)
+        tasks = [
+            text_to_speech_official_first(
+                semaphore,
+                i,
+                chunk,
+                voice,
+                temp_dir,
+                voice_style,
+                voice_role,
+                style_degree,
+                speed,
+                pitch,
+                endpoint,
+                client_session,
+            )
+            for i, chunk in enumerate(text_chunks)
+        ]
+        results = await asyncio.gather(*tasks)
     total_time = time.time() - start_time
     durations = [r[2] for r in results if r is not None]
     total_attempts = sum(r[1] for r in results if r is not None)
@@ -808,7 +977,47 @@ def logout():
 
 @app.route('/v1/audio/all_voices', methods=['GET'])
 @login_required
-def get_all_voices(): return jsonify(ALL_VOICES)
+def get_all_voices():
+    filtered = filter_voices(
+        ALL_VOICES,
+        locale=request.args.get("locale"),
+        gender=request.args.get("gender"),
+        style=request.args.get("style"),
+        role=request.args.get("role"),
+        voice_type=request.args.get("voice_type"),
+        supports_style=request.args.get("supports_style", "").lower() in {"1", "true", "yes"},
+        supports_role=request.args.get("supports_role", "").lower() in {"1", "true", "yes"},
+        edge_available=request.args.get("edge_available", "").lower() in {"1", "true", "yes"},
+        query=request.args.get("q"),
+    )
+    return jsonify(filtered)
+
+
+@app.route('/v1/voices', methods=['GET'])
+@token_required
+async def list_voice_catalog():
+    filtered = filter_voices(
+        ALL_VOICES,
+        locale=request.args.get("locale"),
+        gender=request.args.get("gender"),
+        style=request.args.get("style"),
+        role=request.args.get("role"),
+        voice_type=request.args.get("voice_type"),
+        supports_style=request.args.get("supports_style", "").lower() in {"1", "true", "yes"},
+        supports_role=request.args.get("supports_role", "").lower() in {"1", "true", "yes"},
+        edge_available=request.args.get("edge_available", "").lower() in {"1", "true", "yes"},
+        query=request.args.get("q"),
+    )
+    return jsonify({"object": "list", "data": filtered, "meta": catalog_metadata(filtered)})
+
+
+@app.route('/v1/voices/<path:voice_name>', methods=['GET'])
+@token_required
+async def get_voice_capabilities(voice_name):
+    voice = VOICE_INDEX.get(voice_name)
+    if not voice:
+        return jsonify({"error": {"message": f"Voice '{voice_name}' was not found."}}), 404
+    return jsonify(voice)
 
 @app.route('/v1/config', methods=['GET'])
 @login_required
@@ -824,6 +1033,8 @@ def update_config():
     global config, MAX_CONCURRENT_REQUESTS, CHUNK_SIZE, SYNC_CHUNKS
     try:
         new_data = request.get_json()
+        if not isinstance(new_data, dict):
+            return jsonify({"error": "Invalid data format"}), 400
         required_keys = [
             'port',
             'api_token',
@@ -836,6 +1047,24 @@ def update_config():
         ]
         if not all(k in new_data for k in required_keys):
             return jsonify({"error": "Invalid data format"}), 400
+
+        try:
+            new_data["port"] = _parse_bounded_int(new_data.get("port"), "port", 5050, 1, 65535)
+            new_data["chunk_size"] = _parse_bounded_int(
+                new_data.get("chunk_size"), "chunk_size", 300, 50, 2000
+            )
+            new_data["sync_chunks"] = _parse_bounded_int(
+                new_data.get("sync_chunks"), "sync_chunks", 1, 0, 20
+            )
+            new_data["max_concurrent_requests"] = _parse_bounded_int(
+                new_data.get("max_concurrent_requests"),
+                "max_concurrent_requests",
+                8,
+                1,
+                32,
+            )
+        except ValueError as validation_error:
+            return jsonify({"error": str(validation_error)}), 400
 
         changed_msgs = []
         field_names = {
@@ -855,7 +1084,7 @@ def update_config():
                 )
 
         config.update(new_data)
-        MAX_CONCURRENT_REQUESTS = config.get("max_concurrent_requests", 20)
+        MAX_CONCURRENT_REQUESTS = config.get("max_concurrent_requests", 8)
         CHUNK_SIZE = config.get("chunk_size", 300)
         SYNC_CHUNKS = config.get("sync_chunks", 1)
         save_config_to_file(config)
@@ -869,6 +1098,49 @@ def update_config():
     except Exception as e:
         logger.error(f"Error updating config: {e}", exc_info=True)
         return jsonify({"error": "更新配置时发生内部错误。"}), 500
+
+
+@app.route('/v1/openai-voice-presets', methods=['GET'])
+@login_required
+def get_openai_voice_presets():
+    return jsonify({
+        alias: _get_openai_voice_preset(alias)
+        for alias in OPENAI_VOICE_ALIASES
+    })
+
+
+@app.route('/v1/openai-voice-presets/<alias>', methods=['POST'])
+@login_required
+def save_openai_voice_preset(alias):
+    if alias not in OPENAI_VOICE_ALIASES:
+        return jsonify({"error": "Unsupported OpenAI voice alias."}), 400
+    try:
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return jsonify({"error": "Request body must be a JSON object."}), 400
+        preset = _validate_and_build_openai_preset(data)
+        config.setdefault("openai_voice_presets", {})[alias] = preset
+        config.setdefault("openai_voice_map", {})[alias] = preset["voice"]
+        save_config_to_file(config)
+        logger.info(
+            "OpenAI voice preset '%s' saved: voice=%s, style=%s, role=%s, speed=%s, pitch=%s",
+            alias,
+            preset["voice"],
+            preset["style"],
+            preset["role"] or "default",
+            preset["speed"],
+            preset["pitch"],
+        )
+        return jsonify({
+            "message": f"OpenAI 音色 {alias} 已保存。",
+            "alias": alias,
+            "preset": preset,
+        })
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    except Exception as error:
+        logger.error("Failed to save OpenAI voice preset: %s", error, exc_info=True)
+        return jsonify({"error": "保存 OpenAI 音色预设失败。"}), 500
 
 @app.route('/v1/custom-voices', methods=['GET'])
 @login_required
@@ -945,60 +1217,141 @@ async def generate_speech():
     logger.info("Received new TTS request.")
     with tempfile.TemporaryDirectory() as temp_dir:
         try:
-            data = request.get_json()
-            text, voice_name = data.get("input"), data.get("voice")
+            data = request.get_json(silent=True)
+            if not isinstance(data, dict):
+                return jsonify({"error": {"message": "Request body must be a JSON object."}}), 400
+
+            text = data.get("input")
             stream_enabled = bool(data.get("stream", False))
-            
-            # 获取自定义声音参数
-            voice_style = data.get("style", "general")
-            voice_role = data.get("role", "")
-            style_degree = float(data.get("styleDegree", 1.0))
-            speed = float(data.get("speed", 1.0))
-            pitch = float(data.get("pitch", 1.0))
+
+            requested_alias = data.get("voice")
+            voice_preset = _get_openai_voice_preset(requested_alias)
+            preset_is_complete = bool(
+                voice_preset
+                and any(
+                    key in voice_preset
+                    for key in ("style", "role", "style_degree", "speed", "pitch", "cleaning_options")
+                )
+            )
+            voice_style = str(
+                _preset_value(
+                    data,
+                    voice_preset,
+                    ("style", "emotion"),
+                    "general",
+                    authoritative=preset_is_complete,
+                )
+                or "general"
+            )
+            voice_role = str(
+                _preset_value(
+                    data,
+                    voice_preset,
+                    ("role",),
+                    "",
+                    authoritative=preset_is_complete,
+                )
+                or ""
+            )
+            effective_settings = {
+                "style_degree": _preset_value(
+                    data,
+                    voice_preset,
+                    ("style_degree", "styleDegree", "emotion_intensity"),
+                    1.0,
+                    authoritative=preset_is_complete,
+                ),
+                "speed": _preset_value(
+                    data,
+                    voice_preset,
+                    ("speed",),
+                    1.0,
+                    authoritative=preset_is_complete,
+                ),
+                "pitch": _preset_value(
+                    data,
+                    voice_preset,
+                    ("pitch",),
+                    1.0,
+                    authoritative=preset_is_complete,
+                ),
+            }
+            try:
+                style_degree = _parse_bounded_float(
+                    effective_settings,
+                    ("style_degree",),
+                    1.0,
+                    0.01,
+                    2.0,
+                )
+                speed = _parse_bounded_float(effective_settings, ("speed",), 1.0, 0.25, 4.0)
+                pitch = _parse_bounded_float(effective_settings, ("pitch",), 1.0, 0.5, 1.5)
+                resolved_data = dict(data)
+                if voice_preset and "strict_capabilities" in voice_preset:
+                    resolved_data["strict_capabilities"] = voice_preset["strict_capabilities"]
+                final_voice, voice_info = _resolve_voice(
+                    resolved_data,
+                    style="" if voice_style == "general" else voice_style,
+                    role=voice_role,
+                    preset=voice_preset,
+                )
+            except ValueError as validation_error:
+                return jsonify({"error": {"message": str(validation_error)}}), 400
             
             # 核心逻辑：决定使用哪套过滤规则
-            if config.get('sync_api_filtering', False):
+            preset_cleaning = (voice_preset or {}).get("cleaning_options")
+            if (
+                isinstance(preset_cleaning, dict)
+                and not (data.get("override_preset", False) and "cleaning_options" in data)
+            ):
+                cleaning_options = preset_cleaning
+                logger.info("Using cleaning options saved in OpenAI voice preset '%s'.", requested_alias)
+            elif config.get('sync_api_filtering', False):
                 cleaning_options = config.get('default_cleaning_options', {})
                 logger.info("API filtering sync is ON. Using default cleaning options from config.")
             else:
                 cleaning_options = data.get("cleaning_options", {})
                 logger.info("API filtering sync is OFF. Using cleaning options from request body (if any).")
             
-            if not text or not voice_name: return jsonify({"error": {"message": "Parameters 'input' and 'voice' are required"}}), 400
+            if not isinstance(text, str) or not text.strip():
+                return jsonify({"error": {"message": "Parameter 'input' must be a non-empty string."}}), 400
 
-            final_voice = config['openai_voice_map'].get(voice_name, voice_name)
             logger.info("[Step 1/4] Pre-processing text...")
             processed_text = pre_process_text(text, cleaning_options)
             if processed_text is None:
                 logger.error("\u274c processed_text is None!\uFF01\u8BF7\u68C0\u67E5\u524D\u9762\u7684\u6E05\u6D17\u903B\u8F91")
 
-            # Override settings per request if provided
-            chunk_size_override = (
-                data.get("chunk_size")
-                or request.args.get("chunk_size")
-                or request.args.get("max_chunk_len")
-                or CHUNK_SIZE
-            )
-            try:
-                chunk_size_override = int(chunk_size_override)
-            except (TypeError, ValueError):
-                chunk_size_override = CHUNK_SIZE
+            # Optional request-level tuning with defensive limits. Zero must not
+            # be treated as "missing", especially for sync_chunks.
+            chunk_size_raw = data.get("chunk_size")
+            if chunk_size_raw is None:
+                chunk_size_raw = request.args.get("chunk_size")
+            if chunk_size_raw is None:
+                chunk_size_raw = request.args.get("max_chunk_len")
 
-            sync_chunks = data.get("sync_chunks") or request.args.get("sync_chunks", SYNC_CHUNKS)
-            try:
-                sync_chunks = int(sync_chunks)
-            except (TypeError, ValueError):
-                sync_chunks = SYNC_CHUNKS
+            sync_chunks_raw = data.get("sync_chunks")
+            if sync_chunks_raw is None:
+                sync_chunks_raw = request.args.get("sync_chunks")
 
-            max_concurrent_requests_override = (
-                data.get("max_concurrent_requests")
-                or request.args.get("max_concurrent_requests")
-                or MAX_CONCURRENT_REQUESTS
-            )
+            concurrency_raw = data.get("max_concurrent_requests")
+            if concurrency_raw is None:
+                concurrency_raw = request.args.get("max_concurrent_requests")
             try:
-                max_concurrent_requests_override = int(max_concurrent_requests_override)
-            except (TypeError, ValueError):
-                max_concurrent_requests_override = MAX_CONCURRENT_REQUESTS
+                chunk_size_override = _parse_bounded_int(
+                    chunk_size_raw, "chunk_size", CHUNK_SIZE, 50, 2000
+                )
+                sync_chunks = _parse_bounded_int(
+                    sync_chunks_raw, "sync_chunks", SYNC_CHUNKS, 0, 20
+                )
+                max_concurrent_requests_override = _parse_bounded_int(
+                    concurrency_raw,
+                    "max_concurrent_requests",
+                    MAX_CONCURRENT_REQUESTS,
+                    1,
+                    32,
+                )
+            except ValueError as validation_error:
+                return jsonify({"error": {"message": str(validation_error)}}), 400
 
             max_chunk_len = chunk_size_override
 
@@ -1012,7 +1365,7 @@ async def generate_speech():
             if stream_enabled:
                 logger.info("Streaming mode enabled. Sending chunks as they are generated...")
 
-                return Response(
+                response = Response(
                     generate_streaming_audio_sync(
                         text_chunks,
                         final_voice,
@@ -1026,19 +1379,44 @@ async def generate_speech():
                     ),
                     content_type="audio/mpeg",
                 )
+                response.headers["X-TTS-Voice"] = final_voice
+                response.headers["X-TTS-Chunks"] = str(len(text_chunks))
+                response.headers["X-TTS-Chunk-Size"] = str(max_chunk_len)
+                if voice_style and voice_style != "general":
+                    response.headers["X-TTS-Style"] = voice_style
+                if voice_role:
+                    response.headers["X-TTS-Role"] = voice_role
+                if voice_preset:
+                    response.headers["X-TTS-Preset"] = str(requested_alias)
+                return response
 
             # 非流式：优先使用官方 API（稳定性优先）
-            temp_file_paths = await run_tts_official_first(
-                text_chunks,
-                final_voice,
-                temp_dir,
-                max_concurrent_requests_override,
-                voice_style,
-                voice_role,
-                style_degree,
-                speed,
-                pitch,
-            )
+            try:
+                temp_file_paths = await run_tts_official_first(
+                    text_chunks,
+                    final_voice,
+                    temp_dir,
+                    max_concurrent_requests_override,
+                    voice_style,
+                    voice_role,
+                    style_degree,
+                    speed,
+                    pitch,
+                )
+            except Exception as upstream_error:
+                logger.error("Microsoft TTS request setup failed: %s", upstream_error)
+                return jsonify({
+                    "error": {
+                        "message": "Microsoft TTS upstream is unavailable. Check connectivity and TLS trust settings."
+                    }
+                }), 502
+            if not any(temp_file_paths):
+                logger.error("All TTS chunks failed; returning an upstream error instead of silent audio.")
+                return jsonify({
+                    "error": {
+                        "message": "All TTS chunks failed. Check Microsoft connectivity and TLS trust settings."
+                    }
+                }), 502
             generation_duration = time.time() - request_start_time
             logger.info(f"Concurrent generation finished in {generation_duration:.2f}s.")
             
@@ -1078,7 +1456,19 @@ async def generate_speech():
             logger.info(f"  - Total Processing Time: {total_request_duration:.2f}s")
             logger.info("="*50)
             
-            return send_file(final_audio_stream, mimetype='audio/mpeg', as_attachment=False)
+            response = send_file(final_audio_stream, mimetype='audio/mpeg', as_attachment=False)
+            response.headers["X-TTS-Voice"] = final_voice
+            response.headers["X-TTS-Chunks"] = str(len(text_chunks))
+            response.headers["X-TTS-Chunk-Size"] = str(max_chunk_len)
+            if voice_style and voice_style != "general":
+                response.headers["X-TTS-Style"] = voice_style
+            if voice_role:
+                response.headers["X-TTS-Role"] = voice_role
+            if voice_preset:
+                response.headers["X-TTS-Preset"] = str(requested_alias)
+            if voice_info and not voice_info["edge_available"]:
+                response.headers["X-TTS-Catalog-Source"] = "azure-document"
+            return response
         except Exception as e:
             logger.error(f"An unexpected error occurred in generate_speech: {e}", exc_info=True)
             return jsonify({"error": {"message": "Internal server error."}}), 500
@@ -1088,7 +1478,7 @@ if __name__ == '__main__':
     initialize_config()
     parse_voices()
     
-    port = int(config.get('port', 5050))
+    port = int(os.environ.get('TTS_INTERNAL_PORT', config.get('port', 5050)))
     logger.info(f"Server starting on http://0.0.0.0:{port}")
     if os.environ.get('WEBUI_PASSWORD'):
         logger.info("✅ WebUI password protection is enabled.")
@@ -1099,4 +1489,5 @@ if __name__ == '__main__':
     else:
         logger.warning("API Token is not configured. The API for TTS is open to public access.")
         
-    app.run(host='0.0.0.0', port=port, debug=True)
+    debug_enabled = os.environ.get('FLASK_DEBUG', '').lower() in {'1', 'true', 'yes'}
+    app.run(host='0.0.0.0', port=port, debug=debug_enabled)

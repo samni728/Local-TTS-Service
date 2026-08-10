@@ -10,6 +10,21 @@
 
 _For the Chinese version of this document, please see [README.zh.md](README.zh.md)._
 
+## 🆕 Update — 2026-08-10
+
+This release focuses on Microsoft/Azure voice capabilities, complete OpenAI-compatible voice mapping, long-form TTS reliability, and Docker/VPS compatibility.
+
+- **Microsoft/Azure voice catalog**: imports language and capability metadata from the Azure documentation, currently recognizing 765 voices. Chinese and English are sorted first, with filters for locale/country, gender, voice type, style/emotion, and role support.
+- **Complete OpenAI voice presets**: after previewing a voice in the WebUI, save its voice, style, role, style degree, speed, pitch, and text-cleaning settings directly to an OpenAI alias such as `alloy` or `shimmer`. API clients continue to send standard OpenAI requests.
+- **TTS-safe cleanup and semantic chunking**: Markdown, HTML, URLs, and emojis can be removed without losing decimals, percentages, parentheses, or paragraph meaning. Long text is split at sentence, clause, and English word boundaries, while short paragraphs are coalesced to reduce unnecessary TTS calls.
+- **Faster Microsoft requests**: all chunks within one API request share Microsoft endpoint data and an HTTP session, reducing endpoint lookups and TLS handshakes. Streaming output remains ordered while later chunks are synthesized concurrently in the background.
+- **Cross-platform TLS and Docker/VPS support**: supports the macOS, Windows, and Ubuntu system trust stores plus private CA bundles. Docker has been verified on `linux/arm64` and `linux/amd64` and now includes health checks, sensitive-file exclusions, and safer environment variables.
+- **API guide and regression tests**: the new [Edge/OpenAI extension API guide](docs/EDGE_TTS_API.md) covers styles, speed, roles, intensity, automatic voice selection, streaming, and chunk controls.
+
+### Upgrading from an earlier release
+
+Legacy `openai_voice_map` entries migrate automatically to the new full voice preset format. Docker-based VPS deployments must back up `config.json` before pulling and rebuild the image after updating. See [Updating an existing Docker deployment on a VPS](#updating-an-existing-docker-deployment-on-a-vps) for the complete commands.
+
 ## 🌟 Why choose LocalTTS?
 
 We poured a great deal of effort into making LocalTTS powerful yet simple to use. It is not only functional but also reliable and pleasant to work with.
@@ -39,10 +54,12 @@ Powerful features shouldn't come at the cost of usability.
 - **One-click Docker deployment**: the most beginner-friendly approach, hiding all environment complexity.
 - **Intuitive WebUI**:
   - **Dynamic configuration center**: set ports, concurrency, and API keys directly in the browser.
-  - **Robust text filters**: remove Markdown, URLs, and emojis with a click or define custom keyword filters for total control over what is read aloud.
+  - **Robust text filters**: remove Markdown, HTML, URLs, and emojis while preserving decimals, percentages, parenthetical meaning, and natural paragraph boundaries; custom keyword filters remain available.
     ![Advanced text filtering and service settings](./static/screen/s2.jpg)
     ![OpenAI voice mapping configuration](./static/screen/s3.jpg)
 - **Two layers of security**: optional WebUI login password and API key ensure your service stays secure.
+
+See the [Edge/OpenAI extension API guide](docs/EDGE_TTS_API.md) for styles, roles, style degree, automatic voice selection, and capability discovery.
 
 ## 📖 Use cases
 
@@ -76,6 +93,32 @@ docker-compose up -d
 
 4.  **Access & configure**: - Visit `http://localhost:5050` (or your chosen port) in your browser. - After logging in, open **Service Settings**, set your **API key**, and save.
     ![LocalTTS api UI](./static/screen/s4.jpg)
+
+### Updating an existing Docker deployment on a VPS
+
+`config.json` is persisted through a host bind mount. Rebuilding the image preserves API tokens, voice mappings, full OpenAI voice presets, and text-filter settings. Legacy mappings migrate automatically on first startup.
+
+```bash
+cd /path/to/Local-TTS-Service
+CONFIG_BACKUP="../local-tts-config-$(date +%Y%m%d-%H%M%S).json"
+cp config.json "$CONFIG_BACKUP"
+git restore config.json
+git pull --ff-only
+cp "$CONFIG_BACKUP" config.json
+docker compose config --quiet
+docker compose up -d --build --remove-orphans
+docker compose ps
+docker compose logs --tail=100 tts-service
+```
+
+Set at least `TTS_PORT`, a strong `WEBUI_PASSWORD`, and a stable `FLASK_SECRET_KEY` in `.env`. The external port is controlled by `TTS_PORT`; the container always listens on port `5050`.
+
+### Microsoft TLS certificate compatibility
+
+- macOS, Windows, and Ubuntu use their operating-system trust stores by default; SSL verification stays enabled.
+- A normal Ubuntu/VPS deployment needs no extra setting. Behind a private HTTPS-inspection proxy, install its root CA into the system trust store and restart the service.
+- Alternatively, set `TTS_CA_BUNDLE` to a PEM CA bundle. For Docker, place it under `./certs/` and use its container path, such as `TTS_CA_BUNDLE=/app/certs/company-ca.pem`.
+- If every chunk in a non-streaming request fails, the API returns HTTP `502` instead of reporting a silent file as successful.
 For streaming performance tips, see [Streaming Optimization](docs/STREAMING_OPTIMIZATION.md).
 
 

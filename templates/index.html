@@ -98,7 +98,7 @@
             >
             <label class="flex items-center gap-2"
               ><input type="checkbox" name="no_line_breaks" class="h-4 w-4" />
-              <span data-i18n="merge_line">合并为单行文本</span></label
+              <span data-i18n="merge_line">智能合并段内换行</span></label
             >
           </div>
           <div class="mt-3">
@@ -142,10 +142,21 @@
             <option value="" data-i18n="select_lang_option">
               -- 选择语言 --
             </option>
-            {% for code, name in locales.items() %}
-            <option value="{{ code }}">{{ name }}</option>
-            {% endfor %}
-            <option value="custom">🎛️ 自定义音色配置</option>
+            <optgroup label="中文 / English">
+              {% for code, name in locales.items() %}
+              {% if code.startswith('zh-') or code.startswith('en-') %}
+              <option value="{{ code }}">{{ name }}</option>
+              {% endif %}
+              {% endfor %}
+            </optgroup>
+            <optgroup label="其他语言 / Other languages">
+              {% for code, name in locales.items() %}
+              {% if not code.startswith('zh-') and not code.startswith('en-') %}
+              <option value="{{ code }}">{{ name }}</option>
+              {% endif %}
+              {% endfor %}
+            </optgroup>
+            <option value="custom">🎛️ 自定义音色（兼容模式）</option>
           </select>
         </div>
         <div class="flex-1">
@@ -165,16 +176,71 @@
         </div>
       </div>
 
-      <!-- 自定义声音配置面板 -->
+      <div
+        id="voice-filters"
+        class="hidden mb-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-xl"
+      >
+        <div class="mb-3">
+          <div class="font-semibold">全局音色能力筛选</div>
+          <div class="text-xs text-gray-500 dark:text-gray-300 mt-1">
+            勾选条件后，只保留真正支持对应能力的音色；高级参数会随所选音色自动变化。
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <input
+            id="voice-search"
+            type="search"
+            placeholder="搜索音色、情绪或角色"
+            class="p-2 border rounded-lg dark:bg-gray-800 dark:border-gray-600"
+          />
+          <select
+            id="voice-gender-filter"
+            class="p-2 border rounded-lg dark:bg-gray-800 dark:border-gray-600"
+          >
+            <option value="">全部性别</option>
+            <option value="Female">女性</option>
+            <option value="Male">男性</option>
+            <option value="Neutral">中性</option>
+          </select>
+          <select
+            id="voice-type-filter"
+            class="p-2 border rounded-lg dark:bg-gray-800 dark:border-gray-600"
+          >
+            <option value="">全部声音类型</option>
+          </select>
+        </div>
+        <div class="flex flex-wrap items-center gap-4 mt-3 text-sm">
+          <label class="flex items-center gap-2">
+            <input id="filter-supports-style" type="checkbox" class="h-4 w-4" />
+            仅显示支持情绪/风格
+          </label>
+          <label class="flex items-center gap-2">
+            <input id="filter-supports-role" type="checkbox" class="h-4 w-4" />
+            仅显示支持角色
+          </label>
+          <label class="flex items-center gap-2">
+            <input id="filter-edge-available" type="checkbox" class="h-4 w-4" />
+            仅显示旧 Edge 清单音色
+          </label>
+          <span id="voice-result-count" class="text-gray-500 dark:text-gray-300"></span>
+        </div>
+      </div>
+
+      <div
+        id="voice-capability-summary"
+        class="hidden mb-3 text-sm p-3 border border-blue-200 bg-blue-50 dark:bg-gray-700 dark:border-blue-700 rounded-xl"
+      ></div>
+
+      <!-- 音色高级参数面板 -->
       <div
         id="custom-voice-config"
         class="hidden mb-4 p-4 bg-gray-50 dark:bg-gray-700 rounded-xl"
       >
-        <h3 class="font-semibold mb-3" data-i18n="custom_voice_title">
-          自定义音色配置
+        <h3 class="font-semibold mb-3">
+          音色高级参数
         </h3>
 
-        <div class="mb-4">
+        <div id="custom-voice-management" class="hidden mb-4">
           <label
             for="custom-voice-name"
             class="font-semibold mb-1 block"
@@ -231,46 +297,6 @@
               class="w-full p-2 border border-gray-300 rounded-xl dark:bg-gray-700 dark:border-gray-600"
             >
               <option value="" data-i18n="default_style">默认风格</option>
-              <option value="angry" data-i18n="style_angry">
-                愤怒 (angry)
-              </option>
-              <option value="cheerful" data-i18n="style_cheerful">
-                开朗 (cheerful)
-              </option>
-              <option value="excited" data-i18n="style_excited">
-                兴奋 (excited)
-              </option>
-              <option value="friendly" data-i18n="style_friendly">
-                友好 (friendly)
-              </option>
-              <option value="hopeful" data-i18n="style_hopeful">
-                希望 (hopeful)
-              </option>
-              <option value="sad" data-i18n="style_sad">悲伤 (sad)</option>
-              <option value="shouting" data-i18n="style_shouting">
-                呐喊 (shouting)
-              </option>
-              <option value="terrified" data-i18n="style_terrified">
-                恐惧 (terrified)
-              </option>
-              <option value="unfriendly" data-i18n="style_unfriendly">
-                不友好 (unfriendly)
-              </option>
-              <option value="whispering" data-i18n="style_whispering">
-                耳语 (whispering)
-              </option>
-              <option value="gentle" data-i18n="style_gentle">
-                温柔 (gentle)
-              </option>
-              <option value="lyrical" data-i18n="style_lyrical">
-                抒情 (lyrical)
-              </option>
-              <option value="newscast" data-i18n="style_newscast">
-                新闻播报 (newscast)
-              </option>
-              <option value="poetry-reading" data-i18n="style_poetry">
-                诗歌朗诵 (poetry-reading)
-              </option>
             </select>
           </div>
 
@@ -286,26 +312,6 @@
               class="w-full p-2 border border-gray-300 rounded-xl dark:bg-gray-700 dark:border-gray-600"
             >
               <option value="" data-i18n="default_role">默认角色</option>
-              <option value="Girl" data-i18n="role_girl">女孩</option>
-              <option value="Boy" data-i18n="role_boy">男孩</option>
-              <option value="YoungAdultFemale" data-i18n="role_young_female">
-                年轻女性
-              </option>
-              <option value="YoungAdultMale" data-i18n="role_young_male">
-                年轻男性
-              </option>
-              <option value="OlderAdultFemale" data-i18n="role_adult_female">
-                成年女性
-              </option>
-              <option value="OlderAdultMale" data-i18n="role_adult_male">
-                成年男性
-              </option>
-              <option value="SeniorFemale" data-i18n="role_senior_female">
-                老年女性
-              </option>
-              <option value="SeniorMale" data-i18n="role_senior_male">
-                老年男性
-              </option>
             </select>
           </div>
         </div>
@@ -410,6 +416,52 @@
         <label for="stream-play" data-i18n="stream_play"
           >启用流式播放（无下载，低延迟）</label
         >
+      </div>
+
+      <div
+        id="openai-preset-panel"
+        class="mb-4 p-4 border border-emerald-200 bg-emerald-50 dark:bg-gray-700 dark:border-emerald-700 rounded-xl"
+      >
+        <div class="font-semibold mb-1" data-i18n="save_openai_preset_title">
+          保存为 OpenAI 标准音色
+        </div>
+        <p class="text-sm text-gray-600 dark:text-gray-300 mb-3" data-i18n="save_openai_preset_hint">
+          将当前音色、风格、角色、强度、语速、音调和文本过滤设置保存为一个 OpenAI 音色。外部 API 以后只需传标准 voice 字段。
+        </p>
+        <div class="flex flex-col md:flex-row gap-2">
+          <select
+            id="openai-preset-alias"
+            class="md:w-44 p-2 border rounded-xl dark:bg-gray-800 dark:border-gray-600"
+          >
+            <option value="shimmer">shimmer</option>
+            <option value="alloy">alloy</option>
+            <option value="fable">fable</option>
+            <option value="onyx">onyx</option>
+            <option value="nova">nova</option>
+            <option value="echo">echo</option>
+          </select>
+          <button
+            id="save-openai-preset-button"
+            type="button"
+            class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2 px-4 rounded-xl shadow transition"
+            data-i18n="save_current_as_openai"
+          >
+            保存当前试听配置并替换映射
+          </button>
+          <button
+            id="load-openai-preset-button"
+            type="button"
+            class="md:w-auto bg-gray-500 hover:bg-gray-600 text-white py-2 px-4 rounded-xl shadow transition"
+            data-i18n="load_openai_preset"
+          >
+            载入已保存配置
+          </button>
+        </div>
+        <div
+          id="openai-preset-summary"
+          class="mt-3 text-sm text-gray-700 dark:text-gray-200"
+        ></div>
+        <div id="openai-preset-feedback" class="hidden text-center mt-2"></div>
       </div>
 
       <button
@@ -521,6 +573,7 @@
                 type="number"
                 id="sync-chunks-input"
                 min="0"
+                max="20"
                 value="1"
                 class="w-full p-3 border border-gray-300 rounded-xl dark:bg-gray-800 dark:border-gray-600 text-gray-900 dark:text-white"
               />
@@ -536,7 +589,7 @@
                 type="number"
                 id="concurrency-input"
                 min="1"
-                max="100"
+                max="32"
                 class="w-full p-3 border border-gray-300 rounded-xl dark:bg-gray-800 dark:border-gray-600 text-gray-900 dark:text-white"
               />
             </div>

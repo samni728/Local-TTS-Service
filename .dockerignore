@@ -1,0 +1,14 @@
+.git
+.gitignore
+.env
+.venv
+venv
+__pycache__
+*.py[cod]
+*.log
+.DS_Store
+.pytest_cache
+.ruff_cache
+tests
+config.json
+static/screen

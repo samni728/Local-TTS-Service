@@ -1,17 +1,21 @@
-version: "3.8"
-
 services:
   tts-service:
     build:
       context: .
       args:
         # 将宿主机的环境变量传递给 Docker 构建过程
-        - PIP_INDEX_URL
-        - USE_CHINA_MIRRORS # <--- 新增 APT 镜像开关
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+        USE_CHINA_MIRRORS: ${USE_CHINA_MIRRORS:-false}
     container_name: local-tts-service
     ports:
       - "${TTS_PORT:-5050}:5050"
+    environment:
+      WEBUI_PASSWORD: ${WEBUI_PASSWORD:-}
+      FLASK_SECRET_KEY: ${FLASK_SECRET_KEY:-}
+      TTS_CA_BUNDLE: ${TTS_CA_BUNDLE:-}
+      TTS_INTERNAL_PORT: "5050"
     volumes:
       - ./config.json:/app/config.json
       - ./tts_data:/app/tts_data
+      - ./certs:/app/certs:ro
     restart: unless-stopped
