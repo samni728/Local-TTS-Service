@@ -96,6 +96,51 @@ docker-compose up -d
 
 ### Updating an existing Docker deployment on a VPS
 
+The recommended method is the bundled [`scripts/tts-vps-manager.sh`](scripts/tts-vps-manager.sh). It performs safety checks, backs up private configuration, pulls only fast-forward updates, restores configuration, adds newly introduced `.env` keys without overwriting existing values, rebuilds Docker, waits for health, and automatically rolls back a failed update.
+
+Backups are stored outside the repository in `Local-TTS-Service-backups/` by default. They include `config.json`, `.env`, the generated Flask session secret, custom CA certificates, and the previous Git commit.
+
+#### First use: download the script without pulling the repository
+
+Replace the repository path with its actual location on the VPS:
+
+```bash
+curl -fsSL \
+  https://raw.githubusercontent.com/samni728/Local-TTS-Service/main/scripts/tts-vps-manager.sh \
+  -o /tmp/tts-vps-manager.sh
+
+bash /tmp/tts-vps-manager.sh update \
+  --repo /path/to/Local-TTS-Service
+```
+
+After verifying the source, it can also be run as one pasted command:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/samni728/Local-TTS-Service/main/scripts/tts-vps-manager.sh \
+  | bash -s -- update --repo /path/to/Local-TTS-Service
+```
+
+This works even when WebUI changes in the tracked `config.json` would block a normal `git pull`.
+
+#### Later updates and maintenance
+
+```bash
+cd /path/to/Local-TTS-Service
+
+# Back up, update, rebuild, check health, and roll back on failure.
+./scripts/tts-vps-manager.sh update
+
+# Back up only, list backups, inspect status, or restore the latest backup.
+./scripts/tts-vps-manager.sh backup
+./scripts/tts-vps-manager.sh list
+./scripts/tts-vps-manager.sh status
+./scripts/tts-vps-manager.sh restore latest
+```
+
+Use `--repo /actual/path` when the repository cannot be detected automatically, or `--backup-dir /secure/backup/path` to centralize backups. The script refuses to update when tracked code changes other than `config.json` are present.
+
+#### Manual update fallback
+
 `config.json` is persisted through a host bind mount. Rebuilding the image preserves API tokens, voice mappings, full OpenAI voice presets, and text-filter settings. Legacy mappings migrate automatically on first startup.
 
 ```bash

@@ -96,6 +96,67 @@ LocalTTS 的可能性是无限的，这里仅列举几例：
 
 ### VPS 上更新现有 Docker 部署
 
+推荐使用项目内置的 [`scripts/tts-vps-manager.sh`](scripts/tts-vps-manager.sh)。它会自动执行：
+
+```text
+安全预检查 → 备份私有配置 → 拉取 fast-forward 更新 → 恢复配置
+→ 补齐 .env 新变量 → 重建容器 → 等待健康检查 → 失败时自动回滚
+```
+
+备份默认保存在项目同级的 `Local-TTS-Service-backups/`，包括 `config.json`、`.env`、自动生成的 Flask Session 密钥、自定义 CA 证书和更新前 Git commit。备份目录权限会限制为当前用户访问。
+
+#### 第一次：不执行 git pull，直接下载最新脚本
+
+把下面的项目路径换成 VPS 上的实际路径：
+
+```bash
+curl -fsSL \
+  https://raw.githubusercontent.com/samni728/Local-TTS-Service/main/scripts/tts-vps-manager.sh \
+  -o /tmp/tts-vps-manager.sh
+
+bash /tmp/tts-vps-manager.sh update \
+  --repo /path/to/Local-TTS-Service
+```
+
+确认脚本来源后，也可以直接粘贴一条命令运行：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/samni728/Local-TTS-Service/main/scripts/tts-vps-manager.sh \
+  | bash -s -- update --repo /path/to/Local-TTS-Service
+```
+
+这条方式适合旧仓库中的 `config.json` 已被 WebUI 修改、直接 `git pull` 可能冲突的情况。脚本会先备份并处理冲突，不需要提前拉取新版代码。
+
+#### 后续：直接使用仓库中的脚本
+
+```bash
+cd /path/to/Local-TTS-Service
+./scripts/tts-vps-manager.sh update
+```
+
+常用运维命令：
+
+```bash
+# 只备份，不更新
+./scripts/tts-vps-manager.sh backup
+
+# 查看已有备份
+./scripts/tts-vps-manager.sh list
+
+# 查看当前 Git 版本和容器状态
+./scripts/tts-vps-manager.sh status
+
+# 恢复最近一次备份，并重新构建容器
+./scripts/tts-vps-manager.sh restore latest
+
+# 恢复指定备份
+./scripts/tts-vps-manager.sh restore 20260810-120000-pre-update-1234
+```
+
+如果项目不在脚本自动识别的位置，所有命令都可以增加 `--repo /实际路径`。也可以用 `--backup-dir /安全备份路径` 指定统一备份目录。脚本遇到 `config.json` 之外的未提交代码修改时会停止，不会用 `git reset` 覆盖你的开发代码。
+
+#### 手动更新流程（脚本不可用时）
+
 `config.json` 通过宿主机绑定挂载持久化，已有 API 密钥、音色映射、完整 OpenAI 音色预设和文本过滤设置不会因重新构建镜像而丢失。旧版映射会在首次启动时自动迁移。
 
 ```bash
